@@ -1820,7 +1820,7 @@ function renderGridChoferesAsignacion() {
   if (badgeTotal) badgeTotal.innerText = `${rutasDelDia.length} Ruta(s) Asignada(s)`;
 
   container.innerHTML = choferes.map(ch => {
-    const rutasDelChofer = rutasDelDia.filter(r => r.chofer === ch.nombre);
+    const rutasDelChofer = rutasDelDia.filter(r => (r.chofer === ch.nombre || r.conductor === ch.nombre));
 
     return `
       <div class="light-card rounded-2xl p-5 border border-slate-200 space-y-3 relative">
@@ -2353,14 +2353,14 @@ window.guardarRutaAsignadaRapida = function(e) {
 
     // Eliminar las rutas pendientes anteriores de este chofer para este día específico
     const indicesAEliminar = [];
+    const idsAEliminar = [];
     rutas.forEach((r, idx) => {
-      if (
-        norm(r.dia) === norm(dia) &&
-        r.chofer === choferSeleccionadoAsignacion &&
-        r.estado !== 'completada' &&
-        r.estado !== 'finalizada'
-      ) {
+      const matchDia = norm(r.dia) === norm(dia);
+      const matchChofer = (r.chofer === choferSeleccionadoAsignacion || r.conductor === choferSeleccionadoAsignacion);
+      const noCompletada = r.estado !== 'completada' && r.estado !== 'finalizada';
+      if (matchDia && matchChofer && noCompletada) {
         indicesAEliminar.push(idx);
+        if (r.id) idsAEliminar.push(r.id);
       }
     });
 
@@ -2368,17 +2368,37 @@ window.guardarRutaAsignadaRapida = function(e) {
       rutas.splice(indicesAEliminar[i], 1);
     }
 
-    // Si el día contiene clientes configurados, añadir la ruta consolidada
+    // Eliminar de Supabase las rutas anteriores reemplazadas
+    idsAEliminar.forEach(id => {
+      if (typeof eliminarRutaSupabase === 'function') {
+        eliminarRutaSupabase(id);
+      }
+    });
+
+    // Si el día contiene clientes configurados, añadir la ruta consolidada (en Supabase y local)
     if (clientesDelDia.length > 0) {
-      rutas.push({
-        id: 'ruta_' + Date.now() + '_' + Math.random().toString(36).substr(2, 6),
-        dia: dia,
-        tipoCliente: 'Mixto',
-        chofer: choferSeleccionadoAsignacion,
-        camion: camionDelDia,
-        clientes: [...clientesDelDia],
-        estado: 'pendiente'
-      });
+      if (typeof insertarRutaSupabase === 'function') {
+        insertarRutaSupabase({
+          conductor: choferSeleccionadoAsignacion,
+          vehiculo: camionDelDia,
+          estado: 'pendiente',
+          dia: dia,
+          clientes: [...clientesDelDia],
+          tipoCliente: 'Mixto'
+        });
+      } else {
+        rutas.push({
+          id: 'ruta_' + Date.now() + '_' + Math.random().toString(36).substr(2, 6),
+          dia: dia,
+          tipoCliente: 'Mixto',
+          chofer: choferSeleccionadoAsignacion,
+          conductor: choferSeleccionadoAsignacion,
+          camion: camionDelDia,
+          vehiculo: camionDelDia,
+          clientes: [...clientesDelDia],
+          estado: 'pendiente'
+        });
+      }
       diasActualizados.push(dia);
     } else {
       diasActualizados.push(`${dia} (limpiado)`);
@@ -2405,17 +2425,29 @@ window.eliminarRutaConductor = function(dia, choferNombre, rIndex) {
   if (confirm(`¿Eliminar la Ruta ${rIndex + 1} de ${choferNombre} para el ${dia}?`)) {
     let count = 0;
     let targetIndex = -1;
+    let rutaEliminar = null;
     rutas.forEach((r, i) => {
-      if (r.dia === dia && r.chofer === choferNombre) {
-        if (count === rIndex) targetIndex = i;
+      const matchDia = r.dia && r.dia.trim().toLowerCase() === dia.trim().toLowerCase();
+      const matchChofer = (r.chofer === choferNombre || r.conductor === choferNombre);
+      if (matchDia && matchChofer) {
+        if (count === rIndex) {
+          targetIndex = i;
+          rutaEliminar = r;
+        }
         count++;
       }
     });
 
     if (targetIndex !== -1) {
+      if (rutaEliminar && rutaEliminar.id && typeof eliminarRutaSupabase === 'function') {
+        eliminarRutaSupabase(rutaEliminar.id);
+      }
       rutas.splice(targetIndex, 1);
       guardarDatosEnLocal();
       renderGridChoferesAsignacion();
+      if (typeof renderVisualizacionRutasChoferes === 'function') {
+        renderVisualizacionRutasChoferes();
+      }
     }
   }
 };

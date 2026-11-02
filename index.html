@@ -7,6 +7,8 @@
   <script src="https://cdn.tailwindcss.com"></script>
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
   <link rel="stylesheet" href="css/styles.css">
+  <!-- Supabase JS SDK v2 CDN -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 </head>
 <body class="min-h-screen flex flex-col custom-scrollbar text-base relative overflow-x-hidden">
 
@@ -99,6 +101,12 @@
       
       <!-- KPIs Interactivos en la Cabecera -->
       <div class="flex items-center gap-2 sm:gap-3">
+        <!-- Indicador de Sincronización en Tiempo Real Supabase -->
+        <div id="supabase-status-badge" class="hidden sm:flex items-center gap-2 px-3 py-1.5 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs font-bold shadow-2xs transition-all" title="Sincronización en tiempo real activa con Supabase">
+          <span id="supabase-status-dot" class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+          <span id="supabase-status-text">Supabase Conectado</span>
+        </div>
+
         <button onclick="switchTab('camiones')" class="flex items-center gap-2 px-3 py-2 rounded-xl bg-blue-50 hover:bg-blue-100 border border-blue-200 transition-all cursor-pointer shadow-2xs" title="Ir a Flota Bugamed">
           <i class="fa-solid fa-truck-side text-blue-600 text-sm"></i>
           <div class="text-left hidden sm:block">
@@ -1087,6 +1095,7 @@
     </div>
   </footer>
 
+  <script src="js/supabase.js"></script>
   <script src="js/state.js"></script>
   <script src="js/admin.js"></script>
   <script src="js/logistica.js"></script>

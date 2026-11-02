@@ -416,16 +416,22 @@ window.ejecutarInicioServicioDefinitivo = function(chofer, camionMat, diaSelecci
 
   if (rutaElegida) {
     clientesDeRuta = rutaElegida.clientes || [];
-    if (rutaElegida.camion) camionEfectivo = rutaElegida.camion;
+    if (rutaElegida.camion || rutaElegida.vehiculo) camionEfectivo = rutaElegida.camion || rutaElegida.vehiculo;
     if (rutaElegida.tipoCliente) rutaNombre = `Ruta (${rutaElegida.tipoCliente})`;
     rutaElegida.estado = 'en_curso';
+    if (typeof actualizarEstadoRutaSupabase === 'function' && rutaElegida.id) {
+      actualizarEstadoRutaSupabase(rutaElegida.id, 'en_curso');
+    }
   } else {
-    const rutasChofer = (typeof rutas !== 'undefined') ? rutas.filter(r => r.chofer && r.chofer.trim().toLowerCase() === chofer.trim().toLowerCase() && r.estado !== 'completada' && r.estado !== 'finalizada') : [];
+    const rutasChofer = (typeof rutas !== 'undefined') ? rutas.filter(r => (r.chofer || r.conductor) && (r.chofer || r.conductor).trim().toLowerCase() === chofer.trim().toLowerCase() && r.estado !== 'completada' && r.estado !== 'finalizada') : [];
     if (rutasChofer.length > 0) {
       rutaElegida = rutasChofer[0];
       clientesDeRuta = rutaElegida.clientes || [];
-      if (rutaElegida.camion) camionEfectivo = rutaElegida.camion;
+      if (rutaElegida.camion || rutaElegida.vehiculo) camionEfectivo = rutaElegida.camion || rutaElegida.vehiculo;
       rutaElegida.estado = 'en_curso';
+      if (typeof actualizarEstadoRutaSupabase === 'function' && rutaElegida.id) {
+        actualizarEstadoRutaSupabase(rutaElegida.id, 'en_curso');
+      }
     } else {
       clientesDeRuta = (typeof clientes !== 'undefined') ? clientes.map(c => c.nombre) : [];
     }
@@ -916,6 +922,9 @@ window.confirmarCierreRutaDefinitivo = function(e) {
     rutaOriginal.km = km;
     rutaOriginal.obs = obs;
     rutaOriginal.detalleClientes = detalleClientes;
+    if (typeof actualizarEstadoRutaSupabase === 'function' && rutaOriginal.id) {
+      actualizarEstadoRutaSupabase(rutaOriginal.id, 'completada');
+    }
   }
 
   // 2. Mover / guardar en el historial específico de rutas completadas de ese chofer

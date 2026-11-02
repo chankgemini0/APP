@@ -103,3 +103,8 @@ renderDiasSemana();
 renderCamiones();
 renderChoferes();
 renderAdminCombustible();
+
+// Inicialización de Supabase y sincronización en tiempo real
+if (typeof iniciarSupabaseApp === 'function') {
+  iniciarSupabaseApp();
+}

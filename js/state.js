@@ -28,10 +28,11 @@ let clientes = cargarStorage('bugamed_clientes', [
 ]);
 
 let rutas = cargarStorage('bugamed_rutas', [
-  { id: 'ruta_init_1', dia: 'Lunes', tipoCliente: 'Hoteles', chofer: 'Antonio Fernández', camion: '8912-MBN', clientes: ['Hotel Meliá Palma', 'Hotel Salou Sun'], estado: 'pendiente' },
-  { id: 'ruta_init_2', dia: 'Lunes', tipoCliente: 'Restaurantes', chofer: 'Antonio Fernández', camion: '8912-MBN', clientes: ['Restaurante Cambrils Port'], estado: 'pendiente' },
-  { id: 'ruta_init_3', dia: 'Martes', tipoCliente: 'Restaurantes', chofer: 'David Morales', camion: '4589-KLL', clientes: ['Restaurante Cambrils Port'], estado: 'pendiente' }
+  { id: 'ruta_init_1', dia: 'Lunes', tipoCliente: 'Hoteles', chofer: 'Antonio Fernández', conductor: 'Antonio Fernández', camion: '8912-MBN', vehiculo: '8912-MBN', clientes: ['Hotel Meliá Palma', 'Hotel Salou Sun'], estado: 'pendiente' },
+  { id: 'ruta_init_2', dia: 'Lunes', tipoCliente: 'Restaurantes', chofer: 'Antonio Fernández', conductor: 'Antonio Fernández', camion: '8912-MBN', vehiculo: '8912-MBN', clientes: ['Restaurante Cambrils Port'], estado: 'pendiente' },
+  { id: 'ruta_init_3', dia: 'Martes', tipoCliente: 'Restaurantes', chofer: 'David Morales', conductor: 'David Morales', camion: '4589-KLL', vehiculo: '4589-KLL', clientes: ['Restaurante Cambrils Port'], estado: 'pendiente' }
 ]);
+window.rutas = rutas;
 
 function asegurarEstadoRutas() {
   if (typeof rutas !== 'undefined' && Array.isArray(rutas)) {
@@ -45,7 +46,12 @@ function asegurarEstadoRutas() {
         r.estado = 'pendiente';
         modificado = true;
       }
+      if (!r.conductor && r.chofer) { r.conductor = r.chofer; modificado = true; }
+      if (!r.chofer && r.conductor) { r.chofer = r.conductor; modificado = true; }
+      if (!r.vehiculo && r.camion) { r.vehiculo = r.camion; modificado = true; }
+      if (!r.camion && r.vehiculo) { r.camion = r.vehiculo; modificado = true; }
     });
+    window.rutas = rutas;
     if (modificado) {
       localStorage.setItem('bugamed_rutas', JSON.stringify(rutas));
     }
@@ -227,6 +233,7 @@ let choferAcordeonAbierto = null;
 const diasSemana = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado', 'Domingo'];
 
 function guardarDatosEnLocal() {
+  window.rutas = rutas;
   localStorage.setItem('bugamed_camiones', JSON.stringify(camiones));
   localStorage.setItem('bugamed_choferes', JSON.stringify(choferes));
   localStorage.setItem('bugamed_clientes', JSON.stringify(clientes));
