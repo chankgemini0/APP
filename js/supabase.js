@@ -249,18 +249,31 @@ async function insertarRutaSupabase({ conductor, vehiculo, estado = 'pendiente',
 
   try {
     // La tabla "rutas" en Supabase cuenta con: conductor, vehiculo, estado, clientes (jsonb)
+    // e idealmente también 'dia' y 'tipoCliente' si se crearon las columnas
     const clientesNormalizados = Array.isArray(clientes) ? clientes : (extraerClientesDePayload(clientes) || []);
-    const payload = {
+    let payload = {
       conductor: cond,
       vehiculo: veh,
       estado: est,
-      clientes: clientesNormalizados
+      clientes: clientesNormalizados,
+      dia: dia,
+      tipoCliente: tipoCliente
     };
 
-    const { data, error } = await _supabase
+    let { data, error } = await _supabase
       .from('rutas')
       .insert([payload])
       .select();
+
+    // Si las columnas 'dia' o 'tipoCliente' no existen en la tabla remota (Postgres 42703), reintentar sin ellas
+    if (error && (error.code === '42703' || (error.message && (error.message.includes('dia') || error.message.includes('tipoCliente'))))) {
+      console.warn('⚠️ Columnas dia/tipoCliente no presentes en la tabla "rutas" de Supabase. Reintentando inserción básica...');
+      delete payload.dia;
+      delete payload.tipoCliente;
+      const reintento = await _supabase.from('rutas').insert([payload]).select();
+      data = reintento.data;
+      error = reintento.error;
+    }
 
     if (error) {
       console.error('Error al insertar ruta en Supabase:', error.message);
@@ -275,18 +288,19 @@ async function insertarRutaSupabase({ conductor, vehiculo, estado = 'pendiente',
 
       // Guardar metadatos locales vinculados al id real
       const metaLocal = (typeof cargarStorage === 'function') ? cargarStorage('bugamed_rutas_meta', {}) : {};
-      metaLocal[rutaCreada.id] = { dia, clientes, tipoCliente };
-      localStorage.setItem('bugamed_rutas_meta', JSON.stringify(metaLocal));
+      metaLocal[rutaCreada.id] = { dia, clientes: clientesNormalizados, tipoCliente };
+      try { localStorage.setItem('bugamed_rutas_meta', JSON.stringify(metaLocal)); } catch (e) {}
 
       // Reemplazar tempId con el id real de Supabase
       const index = rutas.findIndex(r => r.id === tempId);
       if (index !== -1) {
         rutas[index] = mapearRutaDesdeSupabase(rutaCreada);
         rutas[index].dia = dia;
-        rutas[index].clientes = clientes;
+        rutas[index].clientes = clientesNormalizados;
         rutas[index].tipoCliente = tipoCliente;
         window.rutas = rutas;
         if (typeof guardarDatosEnLocal === 'function') guardarDatosEnLocal();
+        refrescarVistasRutas();
       }
 
       console.log('✓ Ruta insertada en Supabase con ID:', rutaCreada.id);
@@ -394,12 +408,23 @@ async function actualizarRutaSupabase(id, campos) {
     if (campos.clientes !== undefined) {
       payloadUpdate.clientes = Array.isArray(campos.clientes) ? campos.clientes : (extraerClientesDePayload(campos.clientes) || []);
     }
+    if (campos.dia !== undefined) payloadUpdate.dia = campos.dia;
+    if (campos.tipoCliente !== undefined) payloadUpdate.tipoCliente = campos.tipoCliente;
 
-    const { data, error } = await _supabase
+    let { data, error } = await _supabase
       .from('rutas')
       .update(payloadUpdate)
       .eq('id', id)
       .select();
+
+    // Si falló por columnas adicionales inexistentes en Supabase, reintentar con esquema base
+    if (error && (error.code === '42703' || (error.message && (error.message.includes('dia') || error.message.includes('tipoCliente'))))) {
+      delete payloadUpdate.dia;
+      delete payloadUpdate.tipoCliente;
+      const res = await _supabase.from('rutas').update(payloadUpdate).eq('id', id).select();
+      data = res.data;
+      error = res.error;
+    }
 
     if (error) {
       console.error(`Error actualizando ruta ${id} en Supabase:`, error.message);
@@ -423,44 +448,66 @@ async function actualizarClientesRutaSupabase(id, clientes) {
 
 /**
  * 4. DELETE: Eliminar una ruta de Supabase
+ * Ejecuta la llamada asíncrona a Supabase antes de confirmar el borrado
  */
 async function eliminarRutaSupabase(id) {
-  if (!id) return;
+  if (!id) {
+    console.warn('⚠️ eliminarRutaSupabase llamado sin ID válido');
+    return { success: false, error: 'ID no especificado' };
+  }
 
-  // Limpiar metadatos locales
+  console.log(`🗑️ Ejecutando llamada asíncrona de borrado en Supabase para ruta ID: ${id}...`);
+
+  // Limpiar metadatos locales asociados
   const metaLocal = (typeof cargarStorage === 'function') ? cargarStorage('bugamed_rutas_meta', {}) : {};
   if (metaLocal[id]) {
     delete metaLocal[id];
-    localStorage.setItem('bugamed_rutas_meta', JSON.stringify(metaLocal));
+    try { localStorage.setItem('bugamed_rutas_meta', JSON.stringify(metaLocal)); } catch (e) {}
   }
 
-  if (!_supabase) return;
+  // Si Supabase no está configurado, permitir eliminación local
+  if (!_supabase) {
+    console.warn('⚠️ Supabase no disponible; borrado solo en memoria local.');
+    return { success: true };
+  }
 
+  // Si es un id temporal previo a guardarse en Supabase
   if (String(id).startsWith('temp_') || String(id).startsWith('ruta_init_')) {
-    return;
+    return { success: true };
   }
 
   try {
-    const { error } = await _supabase
+    const { data, error } = await _supabase
       .from('rutas')
       .delete()
-      .eq('id', id);
+      .eq('id', id)
+      .select();
 
     if (error) {
-      console.error(`Error eliminando ruta ${id} en Supabase:`, error.message);
-      return;
+      console.error(`❌ Error al eliminar ruta ${id} en Supabase:`, error.message);
+      if (typeof mostrarToastLogistica === 'function') {
+        mostrarToastLogistica(`⚠️ Error en Supabase al eliminar: ${error.message}`);
+      }
+      return { success: false, error };
     }
 
-    console.log(`✓ Ruta ${id} eliminada correctamente de Supabase.`);
+    if (data && data.length === 0) {
+      console.warn(`⚠️ Supabase reportó 0 filas eliminadas para ID: ${id}. Verifica las políticas RLS de DELETE en la tabla rutas.`);
+    } else {
+      console.log(`✓ Ruta ${id} eliminada exitosamente en Supabase:`, data);
+    }
+
+    return { success: true, data };
   } catch (err) {
-    console.error('Excepción al eliminar ruta en Supabase:', err);
+    console.error(`❌ Excepción al eliminar ruta ${id} en Supabase:`, err);
+    return { success: false, error: err };
   }
 }
 
 /**
  * 5. REALTIME: Suscribirse a cambios en tiempo real en la tabla "rutas"
- * Escucha explícitamente eventos 'INSERT' y 'UPDATE' (así como 'DELETE')
- * garantizando la captura de payload.new en todos los clientes conectados.
+ * Escucha todos los eventos utilizando { event: '*', schema: 'public', table: 'rutas' }
+ * gestionando INSERT, UPDATE y DELETE de forma reactiva.
  */
 function suscribirRutasRealtime() {
   if (!_supabase) {
@@ -471,35 +518,23 @@ function suscribirRutasRealtime() {
   // Eliminar canal previo si existía para evitar listeners duplicados
   if (canalRealtimeRutas) {
     console.log('🔄 Removiendo canal Realtime existente antes de reconectar...');
-    _supabase.removeChannel(canalRealtimeRutas);
+    try {
+      _supabase.removeChannel(canalRealtimeRutas);
+    } catch (e) {
+      console.warn('Error al remover canal Realtime anterior:', e);
+    }
     canalRealtimeRutas = null;
   }
 
-  console.log('📡 Conectando canal Realtime "bugamed-rutas-realtime" para tabla "rutas"...');
+  console.log('📡 Conectando canal Realtime "bugamed-rutas-realtime" para tabla "rutas" con { event: "*" }...');
 
   canalRealtimeRutas = _supabase
     .channel('bugamed-rutas-realtime')
     .on(
       'postgres_changes',
-      { event: 'INSERT', schema: 'public', table: 'rutas' },
+      { event: '*', schema: 'public', table: 'rutas' },
       (payload) => {
-        console.log('⚡ [Realtime INSERT] Evento capturado:', payload);
-        procesarEventoRealtime(payload);
-      }
-    )
-    .on(
-      'postgres_changes',
-      { event: 'UPDATE', schema: 'public', table: 'rutas' },
-      (payload) => {
-        console.log('⚡ [Realtime UPDATE] Evento capturado:', payload);
-        procesarEventoRealtime(payload);
-      }
-    )
-    .on(
-      'postgres_changes',
-      { event: 'DELETE', schema: 'public', table: 'rutas' },
-      (payload) => {
-        console.log('⚡ [Realtime DELETE] Evento capturado:', payload);
+        console.log(`⚡ [Realtime postgres_changes] Evento recibido: [${payload.eventType}]`, payload);
         procesarEventoRealtime(payload);
       }
     )
@@ -518,8 +553,10 @@ function suscribirRutasRealtime() {
 
 /**
  * Procesa los eventos entrantes de Supabase Realtime (INSERT, UPDATE, DELETE).
- * Captura el objeto completo payload.new, actualiza la lista local de rutas y
- * re-renderiza la interfaz inmediatamente sin recargar.
+ * - 'INSERT': añade el nuevo payload.new al array local de rutas.
+ * - 'UPDATE': actualiza el registro existente buscando por su id con payload.new.
+ * - 'DELETE': elimina el registro del array local buscando por payload.old.id.
+ * Vuelve a renderizar la pantalla dinámicamente cada vez que ocurre cualquiera de estos eventos.
  */
 function procesarEventoRealtime(payload) {
   if (!payload) return;
@@ -571,6 +608,7 @@ function procesarEventoRealtime(payload) {
       };
       console.log(`✓ Ruta existente ${nuevoId} actualizada tras INSERT`);
     } else {
+      // Añadir el nuevo payload.new al array local de rutas
       rutas.unshift(rutaMapeada);
       console.log(`✓ Nueva ruta agregada en tiempo real. Conductor: "${rutaMapeada.conductor}" con ${rutaMapeada.clientes.length} clientes`);
     }
@@ -584,11 +622,13 @@ function procesarEventoRealtime(payload) {
     };
     try { localStorage.setItem('bugamed_rutas_meta', JSON.stringify(metaLocal)); } catch (e) {}
 
-    // 3. Registrar el conductor si no existe localmente para que se visualice
+    // Registrar el conductor si no existe localmente para que se visualice
     asegurarConductoresDesdeRutas();
 
     window.rutas = rutas;
     if (typeof guardarDatosEnLocal === 'function') guardarDatosEnLocal();
+
+    // Re-renderizado dinámico de la interfaz
     refrescarVistasRutas();
 
     if (typeof mostrarToastLogistica === 'function') {
@@ -622,7 +662,7 @@ function procesarEventoRealtime(payload) {
 
       console.log(`🔄 Actualizando ruta ${nuevoId} localmente. Conductor: "${conductorAnterior}" -> "${nuevoConductor}", Clientes: ${clientesAnteriores.length} -> ${clientesActualizados.length}`);
 
-      // Actualizar TODOS los campos del elemento en la lista local de rutas
+      // Actualizar el registro existente buscando por su id con payload.new
       rutas[index] = {
         ...rutas[index],
         ...rutaMapeada,
@@ -668,6 +708,8 @@ function procesarEventoRealtime(payload) {
 
       window.rutas = rutas;
       if (typeof guardarDatosEnLocal === 'function') guardarDatosEnLocal();
+
+      // Re-renderizado dinámico de la interfaz
       refrescarVistasRutas();
 
       if (typeof mostrarToastLogistica === 'function') {
@@ -688,22 +730,42 @@ function procesarEventoRealtime(payload) {
       asegurarConductoresDesdeRutas();
       window.rutas = rutas;
       if (typeof guardarDatosEnLocal === 'function') guardarDatosEnLocal();
+
+      // Re-renderizado dinámico de la interfaz
       refrescarVistasRutas();
       console.log(`✓ Ruta incorporada tras UPDATE con conductor: "${rutaMapeada.conductor}" (${rutaMapeada.clientes.length} clientes)`);
     }
   } else if (eventType === 'DELETE') {
+    // Eliminar el registro del array local buscando por payload.old.id
     const idEliminar = viejoRegistro?.id;
+    console.log(`🗑️ Procesando evento Realtime DELETE para ID:`, idEliminar);
+
     if (idEliminar) {
       const antes = rutas.length;
       rutas = rutas.filter(r => String(r.id) !== String(idEliminar));
-      if (rutas.length !== antes) {
-        window.rutas = rutas;
-        if (typeof guardarDatosEnLocal === 'function') guardarDatosEnLocal();
-        refrescarVistasRutas();
-        if (typeof mostrarToastLogistica === 'function') {
-          mostrarToastLogistica(`⚡ Una ruta fue eliminada.`);
-        }
+
+      // Limpiar metadatos locales asociados
+      const metaLocal = (typeof cargarStorage === 'function') ? cargarStorage('bugamed_rutas_meta', {}) : {};
+      if (metaLocal[idEliminar]) {
+        delete metaLocal[idEliminar];
+        try { localStorage.setItem('bugamed_rutas_meta', JSON.stringify(metaLocal)); } catch (e) {}
       }
+
+      if (rutas.length !== antes) {
+        console.log(`✓ Ruta ${idEliminar} eliminada localmente tras evento DELETE de Supabase.`);
+      }
+
+      window.rutas = rutas;
+      if (typeof guardarDatosEnLocal === 'function') guardarDatosEnLocal();
+
+      // Re-renderizado dinámico de la interfaz
+      refrescarVistasRutas();
+
+      if (typeof mostrarToastLogistica === 'function') {
+        mostrarToastLogistica(`⚡ Una ruta fue eliminada.`);
+      }
+    } else {
+      console.warn('⚠️ Evento DELETE recibido pero payload.old no contiene id. Verifica REPLICA IDENTITY FULL en la tabla rutas.');
     }
   }
 }
@@ -788,37 +850,42 @@ function sincronizarServicioActivoDesdeRealtime(nuevoRegistro, rutaLocal) {
  * Refresca todas las interfaces dependientes de rutas en la app en tiempo real
  */
 function refrescarVistasRutas() {
-  // 1. Sincronizar conductores de rutas con la lista de personal
-  if (typeof asegurarConductoresDesdeRutas === 'function') {
-    asegurarConductoresDesdeRutas();
-  }
+  try {
+    if (typeof asegurarConductoresDesdeRutas === 'function') asegurarConductoresDesdeRutas();
+  } catch (e) { console.warn('Aviso al sincronizar conductores:', e); }
 
-  // 2. Calendario semanal de rutas y asignación por conductor
-  if (typeof renderDiasSemana === 'function') renderDiasSemana();
-  if (typeof renderGridChoferesAsignacion === 'function') renderGridChoferesAsignacion();
+  try {
+    if (typeof renderDiasSemana === 'function') renderDiasSemana();
+    if (typeof renderGridChoferesAsignacion === 'function') renderGridChoferesAsignacion();
+  } catch (e) { console.warn('Aviso en renderGridChoferesAsignacion:', e); }
 
-  // 3. Desglose y cuadrícula de rutas por chofer
-  if (typeof renderVisualizacionRutasChoferes === 'function') renderVisualizacionRutasChoferes();
-  if (typeof actualizarSelectPortalChoferes === 'function') actualizarSelectPortalChoferes();
+  try {
+    if (typeof renderVisualizacionRutasChoferes === 'function') renderVisualizacionRutasChoferes();
+    if (typeof actualizarSelectPortalChoferes === 'function') actualizarSelectPortalChoferes();
+  } catch (e) { console.warn('Aviso en renderVisualizacionRutasChoferes:', e); }
 
-  // 4. Módulo de logística y fichaje
-  if (typeof actualizarListadoRutasParaInicio === 'function') actualizarListadoRutasParaInicio();
-  if (typeof actualizarEstadoFichajeInterfaz === 'function') actualizarEstadoFichajeInterfaz();
-  if (typeof renderModuloLogistica === 'function') renderModuloLogistica();
+  try {
+    if (typeof actualizarListadoRutasParaInicio === 'function') actualizarListadoRutasParaInicio();
+    if (typeof actualizarEstadoFichajeInterfaz === 'function') actualizarEstadoFichajeInterfaz();
+    if (typeof renderModuloLogistica === 'function') renderModuloLogistica();
+  } catch (e) { console.warn('Aviso en renderModuloLogistica:', e); }
 
-  // 5. Selector de ruta al fichar chofer si está activo en pantalla
-  const inputChofer = document.getElementById('fichaje-chofer-input');
-  if (inputChofer && inputChofer.value && typeof actualizarSelectorRutasParaChoferInicio === 'function') {
-    actualizarSelectorRutasParaChoferInicio(inputChofer.value);
-  }
+  try {
+    const inputChofer = document.getElementById('fichaje-chofer-input');
+    if (inputChofer && inputChofer.value && typeof actualizarSelectorRutasParaChoferInicio === 'function') {
+      actualizarSelectorRutasParaChoferInicio(inputChofer.value);
+    }
+  } catch (e) {}
 
-  // 6. Personal y flota
-  if (typeof renderChoferes === 'function') renderChoferes();
-  if (typeof renderCamiones === 'function') renderCamiones();
+  try {
+    if (typeof renderChoferes === 'function') renderChoferes();
+    if (typeof renderCamiones === 'function') renderCamiones();
+  } catch (e) {}
 
-  // 7. Historial y contadores KPI
-  if (typeof renderHistorialChoferesGrid === 'function') renderHistorialChoferesGrid();
-  if (typeof actualizarKPIs === 'function') actualizarKPIs();
+  try {
+    if (typeof renderHistorialChoferesGrid === 'function') renderHistorialChoferesGrid();
+    if (typeof actualizarKPIs === 'function') actualizarKPIs();
+  } catch (e) {}
 }
 
 /**

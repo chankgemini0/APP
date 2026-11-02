@@ -1876,7 +1876,7 @@ function renderGridChoferesAsignacion() {
                     <span><i class="fa-solid fa-route text-blue-600"></i> RUTA ${rIndex + 1} (${r.camion})</span>
                     ${r.estado === 'completada' || r.estado === 'finalizada' ? '<span class="text-[10px] bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded font-extrabold border border-emerald-200">✓ Finalizada</span>' : ''}
                   </div>
-                  <button onclick="eliminarRutaConductor('${diaSeleccionadoActual}', '${ch.nombre}', ${rIndex})" class="text-slate-400 hover:text-red-500 p-0.5 cursor-pointer" title="Eliminar ruta"><i class="fa-solid fa-trash-can"></i></button>
+                  <button onclick="eliminarRutaConductor('${diaSeleccionadoActual}', '${ch.nombre}', ${rIndex}, '${r.id}')" class="text-slate-400 hover:text-red-500 p-0.5 cursor-pointer" title="Eliminar ruta"><i class="fa-solid fa-trash-can"></i></button>
                 </div>
                 <div class="text-slate-600 space-y-0.5">
                   ${r.clientes ? r.clientes.map((cli, cIdx) => `<div>• ${typeof cli === 'object' && cli !== null ? (cli.nombre || cli.name || '') : cli}</div>`).join('') : ''}
@@ -2349,7 +2349,7 @@ function renderClientesManualesTempRapido() {
   `).join('');
 }
 
-window.guardarRutaAsignadaRapida = function(e) {
+window.guardarRutaAsignadaRapida = async function(e) {
   if (e) e.preventDefault();
 
   // 1. Guardar el estado del día que está actualmente visible en pantalla
@@ -2377,9 +2377,9 @@ window.guardarRutaAsignadaRapida = function(e) {
   const diasActualizados = [];
 
   // 3. Consolidar definitivamente en rutas los días modificados
-  diasAProcesar.forEach(dia => {
+  for (const dia of diasAProcesar) {
     const estado = modalAsignacionTemporal[dia];
-    if (!estado || !estado.modificado) return;
+    if (!estado || !estado.modificado) continue;
 
     const clientesDelDia = estado.clientes || [];
     const camionDelDia = estado.camion || (camiones[0]?.matricula || '');
@@ -2397,21 +2397,21 @@ window.guardarRutaAsignadaRapida = function(e) {
       }
     });
 
+    // Eliminar de Supabase las rutas anteriores reemplazadas de forma asíncrona
+    for (const id of idsAEliminar) {
+      if (typeof eliminarRutaSupabase === 'function') {
+        await eliminarRutaSupabase(id);
+      }
+    }
+
     for (let i = indicesAEliminar.length - 1; i >= 0; i--) {
       rutas.splice(indicesAEliminar[i], 1);
     }
 
-    // Eliminar de Supabase las rutas anteriores reemplazadas
-    idsAEliminar.forEach(id => {
-      if (typeof eliminarRutaSupabase === 'function') {
-        eliminarRutaSupabase(id);
-      }
-    });
-
     // Si el día contiene clientes configurados, añadir la ruta consolidada (en Supabase y local)
     if (clientesDelDia.length > 0) {
       if (typeof insertarRutaSupabase === 'function') {
-        insertarRutaSupabase({
+        await insertarRutaSupabase({
           conductor: choferSeleccionadoAsignacion,
           vehiculo: camionDelDia,
           estado: 'pendiente',
@@ -2436,16 +2436,20 @@ window.guardarRutaAsignadaRapida = function(e) {
     } else {
       diasActualizados.push(`${dia} (limpiado)`);
     }
-  });
+  }
 
   // 4. Persistir datos en almacenamiento local y sincronizar la interfaz
   guardarDatosEnLocal();
   toggleModalAsignarRuta(false);
 
-  renderGridChoferesAsignacion();
-  renderDiasSemana();
-  if (typeof renderVisualizacionRutasChoferes === 'function') {
-    renderVisualizacionRutasChoferes();
+  if (typeof refrescarVistasRutas === 'function') {
+    refrescarVistasRutas();
+  } else {
+    renderGridChoferesAsignacion();
+    renderDiasSemana();
+    if (typeof renderVisualizacionRutasChoferes === 'function') {
+      renderVisualizacionRutasChoferes();
+    }
   }
 
   const detalleDias = diasActualizados.length > 0 ? diasActualizados.join(', ') : 'semana';
@@ -2454,34 +2458,74 @@ window.guardarRutaAsignadaRapida = function(e) {
   }
 };
 
-window.eliminarRutaConductor = function(dia, choferNombre, rIndex) {
-  if (confirm(`¿Eliminar la Ruta ${rIndex + 1} de ${choferNombre} para el ${dia}?`)) {
+window.eliminarRutaConductor = async function(dia, choferNombre, rIndex, rutaId) {
+  const rutaNumTexto = (rIndex !== undefined && rIndex !== null && !isNaN(rIndex)) ? ` la Ruta ${Number(rIndex) + 1}` : ' la ruta';
+  if (!confirm(`¿Eliminar${rutaNumTexto} de ${choferNombre} para el ${dia}?`)) {
+    return;
+  }
+
+  // 1. Identificar la ruta exacta a eliminar
+  let rutaEliminar = null;
+  let targetIndex = -1;
+
+  if (rutaId) {
+    targetIndex = rutas.findIndex(r => String(r.id) === String(rutaId));
+    if (targetIndex !== -1) {
+      rutaEliminar = rutas[targetIndex];
+    }
+  }
+
+  if (targetIndex === -1) {
     let count = 0;
-    let targetIndex = -1;
-    let rutaEliminar = null;
     rutas.forEach((r, i) => {
       const matchDia = r.dia && r.dia.trim().toLowerCase() === dia.trim().toLowerCase();
       const matchChofer = (r.chofer === choferNombre || r.conductor === choferNombre);
       if (matchDia && matchChofer) {
-        if (count === rIndex) {
+        if (count === Number(rIndex)) {
           targetIndex = i;
           rutaEliminar = r;
         }
         count++;
       }
     });
+  }
 
-    if (targetIndex !== -1) {
-      if (rutaEliminar && rutaEliminar.id && typeof eliminarRutaSupabase === 'function') {
-        eliminarRutaSupabase(rutaEliminar.id);
-      }
-      rutas.splice(targetIndex, 1);
-      guardarDatosEnLocal();
-      renderGridChoferesAsignacion();
-      if (typeof renderVisualizacionRutasChoferes === 'function') {
-        renderVisualizacionRutasChoferes();
-      }
+  if (!rutaEliminar || targetIndex === -1) {
+    console.warn('⚠️ No se encontró la ruta a eliminar en memoria local.');
+    return;
+  }
+
+  const idAEliminar = rutaEliminar.id;
+
+  // 2. Ejecutar la llamada asíncrona a Supabase ANTES de quitar el registro de la interfaz
+  if (typeof eliminarRutaSupabase === 'function' && idAEliminar) {
+    const res = await eliminarRutaSupabase(idAEliminar);
+    if (res && res.success === false) {
+      alert(`⚠️ No se pudo eliminar la ruta en Supabase: ${res.error?.message || res.error || 'Error desconocido'}.\n\nEl registro se mantiene en pantalla para evitar inconsistencias.`);
+      return; // No quitar de la interfaz si la petición falló
     }
+  }
+
+  // 3. Quitar del array local de rutas tras la confirmación exitosa de Supabase
+  const indexFinal = rutas.findIndex(r => String(r.id) === String(idAEliminar));
+  if (indexFinal !== -1) {
+    rutas.splice(indexFinal, 1);
+  }
+  window.rutas = rutas;
+  guardarDatosEnLocal();
+
+  // 4. Re-renderizado dinámico de la pantalla sin recarga manual
+  if (typeof refrescarVistasRutas === 'function') {
+    refrescarVistasRutas();
+  } else {
+    renderGridChoferesAsignacion();
+    if (typeof renderVisualizacionRutasChoferes === 'function') {
+      renderVisualizacionRutasChoferes();
+    }
+  }
+
+  if (typeof mostrarToastLogistica === 'function') {
+    mostrarToastLogistica(`✓ Ruta eliminada correctamente`);
   }
 };
 /* --- GESTIÓN DE MODAL DE CAMIONES Y FILTROS --- */
