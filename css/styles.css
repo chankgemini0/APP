@@ -1,0 +1,97 @@
+@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap');
+
+body {
+  font-family: 'Plus Jakarta Sans', sans-serif;
+  background-color: #f0f6ff;
+  color: #1e293b;
+}
+
+/* Marca de Agua / Patrón de Fondo Sutil con la imagen de Bugamed */
+.bg-watermark {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  /* Usamos la imagen que nos has proporcionado como patrón repetido con opacidad muy baja */
+  background-image: url('bugamed_icono_cian-1-tinta.jpg');
+  background-repeat: repeat;
+  background-size: 140px;
+  opacity: 0.055;
+  pointer-events: none;
+  z-index: 0;
+}
+
+/* Scrollbars personalizados */
+.custom-scrollbar::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+.custom-scrollbar::-webkit-scrollbar-track {
+  background: #f1f5f9;
+}
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 9999px;
+}
+.custom-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: #94a3b8;
+}
+
+/* Tarjetas limpias y efectos hover */
+.light-card {
+  background: rgba(255, 255, 255, 0.92);
+  backdrop-filter: blur(10px);
+  border: 1px solid rgba(226, 232, 240, 0.8);
+  box-shadow: 0 4px 20px -2px rgba(0, 0, 0, 0.04);
+  transition: all 0.25s ease;
+}
+
+.light-card-hover:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 10px 25px -5px rgba(59, 130, 246, 0.1);
+  border-color: rgba(191, 219, 254, 1);
+}
+
+/* Animación de humo y avance de camión */
+@keyframes truckMove {
+  0% { transform: translateX(0px); }
+  50% { transform: translateX(4px); }
+  100% { transform: translateX(0px); }
+}
+
+.truck-driving {
+  animation: truckMove 1.2s infinite ease-in-out;
+}
+
+@keyframes smokeUp {
+  0% { transform: translateY(0) scale(0.8); opacity: 0.8; }
+  100% { transform: translateY(-12px) scale(1.6); opacity: 0; }
+}
+
+.truck-smoke-container {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+}
+
+.smoke-particle {
+  position: absolute;
+  top: -4px;
+  left: -6px;
+  width: 6px;
+  height: 6px;
+  background-color: #94a3b8;
+  border-radius: 50%;
+  animation: smokeUp 1s infinite linear;
+}
+
+.smoke-particle:nth-child(2) {
+  animation-delay: 0.3s;
+  left: -10px;
+}
+
+.smoke-particle:nth-child(3) {
+  animation-delay: 0.6s;
+  left: -2px;
+}

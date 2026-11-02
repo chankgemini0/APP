@@ -1,0 +1,1095 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>BugamedApp - Equipo de logística</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <link rel="stylesheet" href="css/styles.css">
+</head>
+<body class="min-h-screen flex flex-col custom-scrollbar text-base relative overflow-x-hidden">
+
+  <!-- Marca de Agua de Fondo (Logotipo Bugamed en patrón sutil) -->
+  <div class="bg-watermark"></div>
+
+  <!-- Menú Lateral Desplegable (Drawer) -->
+  <div id="side-drawer" class="fixed inset-y-0 left-0 w-72 bg-slate-900 text-white z-50 transform -translate-x-full transition-transform duration-300 ease-in-out shadow-2xl flex flex-col">
+    <div class="p-5 border-b border-slate-800 flex justify-between items-center">
+      <div class="flex items-center gap-2">
+        <i class="fa-solid fa-truck-fast text-blue-400 text-xl"></i>
+        <span class="font-extrabold text-lg text-white">Navegación Rápida</span>
+      </div>
+      <button onclick="toggleSideDrawer(false)" class="text-slate-400 hover:text-white text-2xl font-bold cursor-pointer">&times;</button>
+    </div>
+    
+    <nav class="flex-1 p-4 space-y-2 overflow-y-auto custom-scrollbar">
+      <button onclick="drawerNavigate('logistica')" class="w-full text-left px-4 py-3 rounded-xl hover:bg-blue-600 transition-colors flex items-center gap-3 text-sm font-semibold">
+        <i class="fa-solid fa-house w-5"></i> INICIO
+      </button>
+      <button onclick="drawerNavigate('choferes')" class="w-full text-left px-4 py-3 rounded-xl hover:bg-indigo-600 transition-colors flex items-center gap-3 text-sm font-semibold">
+        <i class="fa-solid fa-users w-5"></i> Personal Bugamed
+      </button>
+      <button onclick="drawerNavigate('vista-chofer')" class="w-full text-left px-4 py-3 rounded-xl hover:bg-blue-600 transition-colors flex items-center gap-3 text-sm font-semibold">
+        <i class="fa-solid fa-route w-5"></i> Resumen de Rutas
+      </button>
+      <button onclick="drawerNavigate('camiones')" class="w-full text-left px-4 py-3 rounded-xl hover:bg-blue-600 transition-colors flex items-center gap-3 text-sm font-semibold">
+        <i class="fa-solid fa-truck-side w-5"></i> Flota Bugamed
+      </button>
+      <button onclick="drawerNavigate('incidencias')" class="w-full text-left px-4 py-3 rounded-xl hover:bg-red-600 transition-colors flex items-center gap-3 text-sm font-semibold">
+        <i class="fa-solid fa-triangle-exclamation w-5"></i> Incidencias
+      </button>
+
+      <!-- APARTADO ADMIN DESPLEGABLE -->
+      <div class="pt-2 pb-1 border-t border-slate-800">
+        <button onclick="toggleAdminSubmenu()" class="w-full text-left px-4 py-3 rounded-xl bg-slate-800 hover:bg-slate-700 transition-colors flex justify-between items-center text-sm font-extrabold text-blue-300 cursor-pointer">
+          <span class="flex items-center gap-3"><i class="fa-solid fa-shield-halved w-5 text-blue-400"></i> ADMIN</span>
+          <i id="admin-chevron" class="fa-solid fa-chevron-down text-xs transition-transform"></i>
+        </button>
+        <div id="admin-submenu" class="pl-4 pt-2 space-y-1.5 hidden">
+          <button onclick="drawerNavigate('rutas-semana')" class="w-full text-left px-4 py-2.5 rounded-lg hover:bg-blue-900/60 transition-colors flex items-center gap-3 text-xs font-semibold text-slate-300">
+            <i class="fa-solid fa-calendar-days w-4 text-blue-400"></i> Planificación semanal
+          </button>
+          <button onclick="drawerNavigate('admin-clientes')" class="w-full text-left px-4 py-2.5 rounded-lg hover:bg-purple-900/60 transition-colors flex items-center gap-3 text-xs font-semibold text-slate-300">
+            <i class="fa-solid fa-hotel w-4 text-purple-400"></i> Clientes
+          </button>
+          <button onclick="drawerNavigate('admin-gasolina')" class="w-full text-left px-4 py-2.5 rounded-lg hover:bg-indigo-900/60 transition-colors flex items-center gap-3 text-xs font-semibold text-slate-300">
+            <i class="fa-solid fa-gas-pump w-4 text-indigo-400"></i> Repostajes
+          </button>
+          <button onclick="drawerNavigate('historial')" class="w-full text-left px-4 py-2.5 rounded-lg hover:bg-purple-900/60 transition-colors flex items-center gap-3 text-xs font-semibold text-slate-300">
+            <i class="fa-solid fa-clock-rotate-left w-4 text-purple-400"></i> Historial
+          </button>
+        </div>
+      </div>
+    </nav>
+
+    <div class="p-4 border-t border-slate-800 text-xs text-slate-400 text-center">
+      BugamedApp v2.13 - Panel Control
+    </div>
+  </div>
+
+  <!-- Overlay para cerrar el menú lateral -->
+  <div id="drawer-overlay" onclick="toggleSideDrawer(false)" class="fixed inset-0 bg-slate-900/40 backdrop-blur-xs z-40 hidden"></div>
+
+  <!-- Header Principal -->
+  <header class="border-b border-slate-200 bg-white/90 backdrop-blur-md sticky top-0 z-30 shadow-sm">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 py-3 flex justify-between items-center">
+      <div class="flex items-center space-x-3 sm:space-x-4">
+        <button onclick="toggleSideDrawer(true)" class="p-2.5 rounded-xl bg-slate-100 hover:bg-blue-50 text-slate-700 hover:text-blue-600 border border-slate-200 transition-colors cursor-pointer" title="Abrir Menú">
+          <i class="fa-solid fa-bars text-lg"></i>
+        </button>
+
+        <!-- Logotipo con enlace a https://bugamed.es/ -->
+        <a href="https://bugamed.es/" target="_blank" rel="noopener noreferrer" class="bg-white p-2 rounded-2xl shadow-md border border-blue-100 flex items-center justify-center hover:scale-105 transition-transform cursor-pointer" title="Ir a bugamed.es">
+          <img 
+            src="bugamed_horizontal_cian-1-tinta.jpg" 
+            alt="Bugamed - Bugaderia del Mediterrani" 
+            class="h-10 sm:h-12 w-auto object-contain"
+            onerror="this.onerror=null; this.src='https://i.imgur.com/8Q9Z5Xm.png';"
+          >
+        </a>
+
+        <div class="hidden sm:block border-l border-slate-200 pl-4">
+          <div class="flex items-center gap-2">
+            <h1 class="text-xl font-extrabold tracking-tight text-blue-900">Equipo de logística</h1>
+          </div>
+          <p class="text-xs text-slate-500">Plataforma Integral de Flotas & Rutas</p>
+        </div>
+      </div>
+      
+      <!-- KPIs Interactivos en la Cabecera -->
+      <div class="flex items-center gap-2 sm:gap-3">
+        <button onclick="switchTab('camiones')" class="flex items-center gap-2 px-3 py-2 rounded-xl bg-blue-50 hover:bg-blue-100 border border-blue-200 transition-all cursor-pointer shadow-2xs" title="Ir a Flota Bugamed">
+          <i class="fa-solid fa-truck-side text-blue-600 text-sm"></i>
+          <div class="text-left hidden sm:block">
+            <p class="text-[10px] font-bold uppercase text-slate-500 leading-none">Camiones</p>
+            <p id="kpi-camiones" class="text-sm font-extrabold text-blue-950 leading-tight">0</p>
+          </div>
+        </button>
+
+        <button onclick="switchTab('choferes')" class="flex items-center gap-2 px-3 py-2 rounded-xl bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 transition-all cursor-pointer shadow-2xs" title="Ir a Personal">
+          <i class="fa-solid fa-id-card text-indigo-600 text-sm"></i>
+          <div class="text-left hidden sm:block">
+            <p class="text-[10px] font-bold uppercase text-slate-500 leading-none">Conductores</p>
+            <p id="kpi-choferes" class="text-sm font-extrabold text-indigo-950 leading-tight">0</p>
+          </div>
+        </button>
+
+        <button onclick="switchTab('incidencias')" class="flex items-center gap-2 px-3 py-2 rounded-xl bg-red-50 hover:bg-red-100 border border-red-200 transition-all cursor-pointer shadow-2xs animate-pulse" title="Ir a Apartado de Incidencias">
+          <i class="fa-solid fa-triangle-exclamation text-red-600 text-sm"></i>
+          <div class="text-left hidden sm:block">
+            <p class="text-[10px] font-bold uppercase text-slate-500 leading-none">Incidencias</p>
+            <p id="kpi-incidencias" class="text-sm font-extrabold text-red-950 leading-tight">0</p>
+          </div>
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <main class="max-w-7xl mx-auto px-4 sm:px-6 py-8 flex-1 w-full space-y-8 z-10 relative">
+
+    <!-- Navegación por Pestañas Principales (Personal Bugamed, INICIO, Resumen de Rutas) -->
+    <div class="flex items-center bg-slate-200/80 p-1.5 rounded-2xl border border-slate-300 relative z-30 gap-1.5 shadow-sm">
+      <!-- 1. Personal Bugamed -->
+      <button id="tab-choferes" onclick="switchTab('choferes')" class="flex-1 min-w-[110px] sm:min-w-[130px] py-3 px-2 sm:px-3 rounded-xl text-xs sm:text-sm font-bold transition-all duration-200 flex items-center justify-center gap-2 text-slate-600 hover:text-blue-700 hover:bg-white/60 cursor-pointer">
+        <i class="fa-solid fa-users text-sm sm:text-base"></i>
+        <span class="truncate">Personal Bugamed</span>
+      </button>
+
+      <!-- 2. INICIO (Pestaña Central Destacada) -->
+      <button id="tab-logistica" onclick="switchTab('logistica')" class="flex-1 min-w-[130px] sm:min-w-[150px] py-3.5 sm:py-4 px-3 sm:px-4 rounded-xl text-sm sm:text-base font-extrabold transition-all duration-200 flex items-center justify-center gap-2 bg-blue-600 text-white shadow-lg scale-105 z-10 cursor-pointer">
+        <i class="fa-solid fa-house text-base sm:text-lg"></i>
+        <span>INICIO</span>
+      </button>
+
+      <!-- 3. Resumen de Rutas -->
+      <button id="tab-vista-chofer" onclick="switchTab('vista-chofer')" class="flex-1 min-w-[110px] sm:min-w-[130px] py-3 px-2 sm:px-3 rounded-xl text-xs sm:text-sm font-bold transition-all duration-200 flex items-center justify-center gap-2 text-slate-600 hover:text-blue-700 hover:bg-white/60 cursor-pointer">
+        <i class="fa-solid fa-route text-sm sm:text-base"></i>
+        <span class="truncate">Resumen de Rutas</span>
+      </button>
+    </div>
+
+    <!-- SECCIÓN: INICIO -->
+    <section id="section-logistica" class="space-y-6">
+      <div class="relative w-full flex flex-col items-center justify-center text-center">
+        <!-- Botón de acción rápida (Alerta Push) posicionado de forma responsive -->
+        <div class="w-full flex justify-end lg:absolute lg:right-0 lg:top-1/2 lg:-translate-y-1/2 mb-3 lg:mb-0">
+          <button onclick="enviarAlertaUltimaHora()" class="bg-purple-600 hover:bg-purple-700 text-white font-bold text-xs sm:text-sm px-4 py-2.5 rounded-xl shadow-md transition-all flex items-center gap-2 cursor-pointer">
+            <i class="fa-solid fa-bell animate-bounce"></i> Enviar Alerta Push
+          </button>
+        </div>
+
+        <!-- Título corporativo centrado -->
+        <div class="w-full text-center">
+          <h2 class="text-2xl sm:text-3xl font-extrabold text-blue-900 tracking-tight text-center">
+            EQUIPO DE TRANSPORTE BUGAMED
+          </h2>
+          <div class="w-16 h-0.5 bg-blue-600/40 rounded-full mx-auto my-2"></div>
+          <p class="text-xs sm:text-sm text-slate-500 font-medium tracking-wide uppercase">
+            Panel de Control Operativo · Gestión y Despacho de Flota
+          </p>
+        </div>
+      </div>
+
+      <!-- BLOQUE PRINCIPAL CENTRADO: EMPEZAR RUTA -->
+      <div class="max-w-3xl mx-auto light-card rounded-2xl p-6 sm:p-8 border-t-4 border-t-blue-600 space-y-5 shadow-lg">
+        <div class="flex justify-between items-center border-b border-slate-100 pb-3">
+          <h3 class="font-bold text-blue-900 text-xl flex items-center gap-3">
+            <span class="truck-smoke-container">
+              <i id="icono-camion-visual" class="fa-solid fa-truck-front text-slate-400 text-xl transition-all"></i>
+              <span id="container-camion-humo"></span>
+            </span>
+            EMPEZAR RUTA
+          </h3>
+          <span id="badge-rutas-activas-count" class="px-3 py-1 rounded-full text-xs font-bold bg-slate-100 text-slate-600 border border-slate-200">
+            0 Rutas Activas
+          </span>
+        </div>
+
+        <form id="form-fichaje-inicio" onsubmit="iniciarRutaServicio(event)" class="space-y-4">
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            
+            <!-- SELECTOR DE CONDUCTOR CON TARJETA DE PERFIL INTERACTIVA -->
+            <div>
+              <label class="block text-xs font-black uppercase text-slate-700 mb-1">CONDUCTOR</label>
+              <div onclick="abrirSelectorChoferesInicio()" id="selector-chofer-card-preview" class="w-full bg-blue-50/70 border-2 border-blue-200 rounded-xl p-3 flex items-center justify-between cursor-pointer hover:border-blue-600 transition-all shadow-2xs">
+                <div class="flex items-center gap-3">
+                  <div id="preview-chofer-img" class="w-10 h-10 rounded-full bg-blue-200 text-blue-700 flex items-center justify-center font-bold overflow-hidden border border-blue-300">
+                    <i class="fa-solid fa-user"></i>
+                  </div>
+                  <div>
+                    <p id="preview-chofer-nombre" class="text-sm font-extrabold text-slate-900">Seleccionar conductor...</p>
+                    <p class="text-[10px] text-slate-500 font-semibold">Haz clic para escoger</p>
+                  </div>
+                </div>
+                <i class="fa-solid fa-chevron-down text-blue-600 text-xs"></i>
+              </div>
+              <input type="hidden" id="fichaje-chofer-input" required>
+            </div>
+
+            <!-- SELECTOR DE VEHÍCULO CON TARJETA DE PERFIL INTERACTIVA -->
+            <div>
+              <label class="block text-xs font-black uppercase text-slate-700 mb-1">VEHÍCULO ASIGNADO</label>
+              <div onclick="abrirSelectorCamionesInicio()" id="selector-camion-card-preview" class="w-full bg-blue-50/70 border-2 border-blue-200 rounded-xl p-3 flex items-center justify-between cursor-pointer hover:border-blue-600 transition-all shadow-2xs">
+                <div class="flex items-center gap-3">
+                  <div id="preview-camion-img" class="w-10 h-10 rounded-xl bg-blue-200 text-blue-700 flex items-center justify-center font-bold overflow-hidden border border-blue-300">
+                    <i class="fa-solid fa-truck"></i>
+                  </div>
+                  <div>
+                    <p id="preview-camion-matricula" class="text-sm font-extrabold text-slate-900">Seleccionar vehículo...</p>
+                    <p class="text-[10px] text-slate-500 font-semibold">Haz clic para escoger</p>
+                  </div>
+                </div>
+                <i class="fa-solid fa-chevron-down text-blue-600 text-xs"></i>
+              </div>
+              <input type="hidden" id="fichaje-camion-input" required>
+            </div>
+
+          </div>
+
+          <button type="submit" class="w-full py-3.5 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl shadow-md transition-all text-sm flex items-center justify-center gap-2 cursor-pointer">
+            <i class="fa-solid fa-right-to-bracket text-base"></i> INICIAR RUTA
+          </button>
+        </form>
+
+        <div id="box-rutas-activas-panel" class="hidden space-y-3 pt-4 border-t border-slate-200">
+          <p class="text-xs font-extrabold uppercase text-purple-800 tracking-wider flex items-center gap-1.5">
+            <i class="fa-solid fa-spinner animate-spin text-purple-600"></i> Rutas Activas en Curso (Haz clic para desplegar):
+          </p>
+          <div id="contenedor-acordeon-rutas-activas" class="space-y-3"></div>
+        </div>
+      </div>
+
+      <!-- BLOQUES SECUNDARIOS ABAJO -->
+      <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 pt-4">
+        <div onclick="toggleModalRepostaje(true)" class="light-card light-card-hover rounded-2xl p-8 border-t-4 border-t-indigo-500 flex flex-col items-center justify-center text-center cursor-pointer group shadow-md transition-all">
+          <div class="w-20 h-20 rounded-2xl bg-indigo-50 text-indigo-600 flex items-center justify-center mb-3 group-hover:scale-110 group-hover:bg-indigo-600 group-hover:text-white transition-all shadow-inner">
+            <i class="fa-solid fa-gas-pump text-4xl"></i>
+          </div>
+          <span class="text-2xl font-black text-slate-800 group-hover:text-indigo-600 transition-colors">
+            Añadir Repostaje
+          </span>
+        </div>
+
+        <div class="light-card rounded-2xl p-6 border-t-4 border-t-purple-500 space-y-4">
+          <div class="flex justify-between items-center border-b border-slate-100 pb-3">
+            <h3 class="font-bold text-slate-800 text-base flex items-center gap-2">
+              <i class="fa-solid fa-triangle-exclamation text-red-600"></i> Incidencias de Vehículo
+            </h3>
+            <div class="flex gap-2">
+              <button onclick="switchTab('incidencias')" class="bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold px-2.5 py-2 rounded-lg cursor-pointer">Ver todas</button>
+              <button onclick="toggleModalIncidencia(true)" class="bg-purple-50 hover:bg-purple-100 text-purple-700 border border-purple-200 text-xs font-bold px-3 py-2 rounded-lg cursor-pointer">+ Reportar</button>
+            </div>
+          </div>
+          <div id="lista-incidencias" class="space-y-3 max-h-56 overflow-y-auto custom-scrollbar"></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- APARTADO DE INCIDENCIAS -->
+    <section id="section-incidencias" class="hidden space-y-6">
+      <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+        <div>
+          <h2 class="text-xl sm:text-2xl font-extrabold text-blue-950 flex items-center gap-2.5">
+            <i class="fa-solid fa-triangle-exclamation text-red-600"></i> Gestión Integral de Incidencias
+          </h2>
+          <p class="text-sm text-slate-500 mt-0.5">Control y seguimiento de averías mecánicas, neumáticos y estado de la flota.</p>
+        </div>
+        <button onclick="toggleModalIncidencia(true)" class="bg-red-600 hover:bg-red-700 text-white font-bold text-sm sm:text-base px-5 py-3 rounded-xl shadow-md transition-all flex items-center gap-2 cursor-pointer">
+          <i class="fa-solid fa-plus text-lg"></i> Reportar Avería
+        </button>
+      </div>
+
+      <div class="flex bg-slate-200/80 p-1.5 rounded-2xl border border-slate-300 w-fit gap-1">
+        <button id="btn-tab-inc-curso" onclick="filtrarIncidenciasTab('curso')" class="px-5 py-2.5 rounded-xl text-xs font-bold bg-red-600 text-white shadow-md transition-all cursor-pointer flex items-center gap-2">
+          <i class="fa-solid fa-circle-exclamation"></i> En Curso (<span id="badge-count-curso">0</span>)
+        </button>
+        <button id="btn-tab-inc-resueltas" onclick="filtrarIncidenciasTab('resueltas')" class="px-5 py-2.5 rounded-xl text-xs font-bold bg-slate-100 text-slate-600 hover:bg-white transition-all cursor-pointer flex items-center gap-2">
+          <i class="fa-solid fa-circle-check"></i> Resueltas / Historial (<span id="badge-count-resueltas">0</span>)
+        </button>
+      </div>
+
+      <div id="lista-completa-incidencias" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5"></div>
+    </section>
+
+    <!-- SECCIÓN: PLANIFICACIÓN SEMANAL -->
+    <section id="section-rutas-semana" class="hidden space-y-6">
+      <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+        <div>
+          <h2 class="text-xl sm:text-2xl font-extrabold text-blue-950 flex items-center gap-2.5">
+            <i class="fa-solid fa-calendar-days text-blue-600"></i> Planificación Semanal
+          </h2>
+          <p class="text-sm text-slate-500 mt-0.5">Haz clic en un día de la semana para asignar o revisar rutas por conductor.</p>
+        </div>
+      </div>
+
+      <div id="grid-dias-semana" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-5"></div>
+
+      <div id="panel-detalle-dia" class="hidden light-card rounded-2xl p-6 sm:p-8 border border-blue-200 space-y-6">
+        <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 border-b border-slate-200 pb-5">
+          <div class="flex items-center gap-4">
+            <button onclick="cerrarDetalleDia()" class="w-10 h-10 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 flex items-center justify-center text-base transition-colors cursor-pointer" title="Volver al calendario semanal">
+              <i class="fa-solid fa-arrow-left"></i>
+            </button>
+            <div>
+              <h3 id="titulo-dia-seleccionado" class="text-3xl font-extrabold text-blue-950">LUNES</h3>
+              <p class="text-sm text-slate-500">Selecciona un conductor para asignarle rutas acumuladas (Ruta 1, Ruta 2...)</p>
+            </div>
+          </div>
+          <div class="flex items-center gap-2 self-end sm:self-auto">
+            <button type="button" id="btn-dia-anterior" onclick="cambiarDiaDetalle(-1)" class="w-8 h-8 sm:w-9 sm:h-9 rounded-xl bg-white hover:bg-blue-50 text-slate-600 hover:text-blue-700 flex items-center justify-center text-xs sm:text-sm transition-all shadow-xs border border-slate-200 hover:border-blue-300 cursor-pointer active:scale-95" title="Día anterior">
+              <i class="fa-solid fa-chevron-left"></i>
+            </button>
+            <span id="badge-total-rutas-dia" class="px-3.5 sm:px-4 py-1.5 sm:py-2 bg-blue-50 text-blue-700 border border-blue-200 rounded-full text-xs sm:text-sm font-bold shadow-xs whitespace-nowrap">
+              0 Ruta(s) Asignada(s)
+            </span>
+            <button type="button" id="btn-dia-siguiente" onclick="cambiarDiaDetalle(1)" class="w-8 h-8 sm:w-9 sm:h-9 rounded-xl bg-white hover:bg-blue-50 text-slate-600 hover:text-blue-700 flex items-center justify-center text-xs sm:text-sm transition-all shadow-xs border border-slate-200 hover:border-blue-300 cursor-pointer active:scale-95" title="Día siguiente">
+              <i class="fa-solid fa-chevron-right"></i>
+            </button>
+          </div>
+        </div>
+
+        <div class="space-y-3">
+          <h4 class="text-xs font-black uppercase text-slate-600 tracking-wider">Conductores Disponibles (Haz clic para asignar ruta):</h4>
+          <div id="grid-choferes-asignacion" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4"></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- SECCIÓN: CLIENTES (ADMIN) -->
+    <section id="section-admin-clientes" class="hidden space-y-6">
+      <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+        <div>
+          <h2 class="text-xl sm:text-2xl font-extrabold text-blue-950 flex items-center gap-2.5">
+            <i class="fa-solid fa-hotel text-purple-600"></i> Directorio de Clientes (Panel Admin)
+          </h2>
+          <p class="text-sm text-slate-500 mt-0.5">Gestión exclusiva de administración para crear y eliminar hoteles, restaurantes, mixtos y campings.</p>
+        </div>
+        <button onclick="toggleModalCliente(true)" class="bg-purple-600 hover:bg-purple-700 text-white font-bold text-sm sm:text-base px-5 py-3 rounded-xl shadow-md transition-all flex items-center gap-2 cursor-pointer">
+          <i class="fa-solid fa-plus text-lg"></i> Registrar Cliente
+        </button>
+      </div>
+
+      <div class="light-card p-4 rounded-2xl flex flex-col sm:flex-row gap-4 justify-between items-center border border-slate-200">
+        <div class="relative w-full sm:w-80">
+          <i class="fa-solid fa-magnifying-glass absolute left-3.5 top-3.5 text-slate-400"></i>
+          <input type="text" id="buscar-cliente" oninput="renderClientes()" placeholder="Buscar cliente por nombre o zona..." class="w-full bg-slate-50 border border-slate-300 rounded-xl pl-10 pr-4 py-2.5 text-sm text-slate-800 focus:outline-none focus:border-purple-500">
+        </div>
+        <div class="flex flex-wrap gap-1.5 w-full sm:w-auto">
+          <button onclick="filtrarTipoCliente('Todos')" id="filtro-cli-todos" class="px-3 py-2 rounded-xl text-xs font-bold bg-purple-600 text-white border border-purple-600 cursor-pointer">Todos</button>
+          <button onclick="filtrarTipoCliente('Hoteles')" id="filtro-cli-hoteles" class="px-3 py-2 rounded-xl text-xs font-bold bg-slate-100 text-slate-600 border border-slate-300 hover:bg-slate-200 cursor-pointer">Hoteles</button>
+          <button onclick="filtrarTipoCliente('Restaurantes')" id="filtro-cli-restaurantes" class="px-3 py-2 rounded-xl text-xs font-bold bg-slate-100 text-slate-600 border border-slate-300 hover:bg-slate-200 cursor-pointer">Restaurantes</button>
+          <button onclick="filtrarTipoCliente('Mixto')" id="filtro-cli-mixto" class="px-3 py-2 rounded-xl text-xs font-bold bg-slate-100 text-slate-600 border border-slate-300 hover:bg-slate-200 cursor-pointer">Mixto</button>
+          <button onclick="filtrarTipoCliente('Camping')" id="filtro-cli-camping" class="px-3 py-2 rounded-xl text-xs font-bold bg-slate-100 text-slate-600 border border-slate-300 hover:bg-slate-200 cursor-pointer">Camping</button>
+        </div>
+      </div>
+
+      <div id="lista-clientes-por-zona" class="space-y-6"></div>
+    </section>
+
+    <!-- SECCIÓN: HISTORIAL DE RUTAS -->
+    <section id="section-historial" class="hidden space-y-6">
+      <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+        <div>
+          <h2 class="text-xl sm:text-2xl font-extrabold text-blue-950 flex items-center gap-2.5">
+            <i class="fa-solid fa-clock-rotate-left text-purple-600"></i> Historial de Rutas por Chofer
+          </h2>
+          <p class="text-sm text-slate-500 mt-0.5">Selecciona un conductor para consultar su actividad detallada, horas y repostajes.</p>
+        </div>
+      </div>
+
+      <div id="grid-choferes-historial" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5"></div>
+
+      <div id="panel-detalle-historial-chofer" class="hidden light-card rounded-2xl p-6 sm:p-8 border border-purple-200 space-y-6">
+        <div class="flex justify-between items-center border-b border-slate-200 pb-5">
+          <div class="flex items-center gap-4">
+            <button onclick="cerrarDetalleHistorialChofer()" class="w-10 h-10 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 flex items-center justify-center text-base transition-colors cursor-pointer">
+              <i class="fa-solid fa-arrow-left"></i>
+            </button>
+            <div>
+              <h3 id="hist-chofer-nombre" class="text-2xl font-extrabold text-blue-950">Manuel García</h3>
+              <p class="text-sm text-slate-500">Resumen integral de actividad</p>
+            </div>
+          </div>
+          <span id="hist-chofer-horas" class="px-4 py-1.5 bg-purple-50 text-purple-700 border border-purple-200 rounded-full text-sm font-bold">
+            0 hrs trabajadas
+          </span>
+        </div>
+
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-6 items-start">
+          <div class="space-y-3 bg-white/60 p-4 rounded-2xl border border-slate-200/80 shadow-2xs">
+            <h4 class="font-bold text-slate-800 text-base flex items-center justify-between border-b border-slate-200 pb-2.5">
+              <span class="flex items-center gap-2">
+                <i class="fa-solid fa-circle-check text-emerald-600"></i> Rutas Finalizadas
+              </span>
+            </h4>
+            <div id="hist-lista-rutas-finalizadas" class="space-y-3 max-h-[520px] overflow-y-auto custom-scrollbar pr-1"></div>
+          </div>
+
+          <div class="space-y-3 bg-white/60 p-4 rounded-2xl border border-slate-200/80 shadow-2xs">
+            <h4 class="font-bold text-slate-800 text-base flex items-center gap-2 border-b border-slate-200 pb-2.5">
+              <i class="fa-solid fa-gas-pump text-indigo-600"></i> Repostajes Realizados
+            </h4>
+            <div id="hist-lista-repostajes" class="space-y-3 max-h-[520px] overflow-y-auto custom-scrollbar pr-1"></div>
+          </div>
+
+          <div class="space-y-3 bg-white/60 p-4 rounded-2xl border border-slate-200/80 shadow-2xs">
+            <h4 class="font-bold text-slate-800 text-base flex items-center gap-2 border-b border-slate-200 pb-2.5">
+              <i class="fa-solid fa-calendar-day text-blue-600"></i> Próximas Rutas
+            </h4>
+            <div id="hist-lista-proximas-rutas" class="space-y-3 max-h-[520px] overflow-y-auto custom-scrollbar pr-1"></div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- SECCIÓN: RESUMEN DE RUTAS -->
+    <section id="section-vista-chofer" class="hidden space-y-6">
+      <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+        <div>
+          <h2 class="text-xl sm:text-2xl font-extrabold text-blue-950 flex items-center gap-2.5">
+            <i class="fa-solid fa-route text-indigo-600"></i> Resumen de Rutas por Conductor
+          </h2>
+          <p class="text-sm text-slate-500 mt-0.5">Selecciona la tarjeta de un conductor para consultar su planificación semanal de rutas por días.</p>
+        </div>
+      </div>
+
+      <!-- CUADRÍCULA (GRID) CON LAS TARJETAS DE TODOS LOS CHÓFERES -->
+      <div id="grid-choferes-rutas" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4"></div>
+
+      <!-- PANEL DETALLADO DE RUTAS DEL CHÓFER POR DÍAS -->
+      <div id="panel-detalle-rutas-chofer" class="hidden light-card rounded-2xl p-6 sm:p-8 border border-indigo-200 space-y-6">
+        <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 border-b border-slate-200 pb-5">
+          <div class="flex items-center gap-4">
+            <button onclick="cerrarDetalleRutasChofer()" class="w-10 h-10 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 flex items-center justify-center text-base transition-colors cursor-pointer" title="Volver a la cuadrícula de conductores">
+              <i class="fa-solid fa-arrow-left"></i>
+            </button>
+            <div id="detalle-chofer-avatar-container" class="w-12 h-12 rounded-xl bg-indigo-100 text-indigo-700 flex items-center justify-center font-bold text-lg overflow-hidden border border-indigo-200 shrink-0">
+              <i class="fa-solid fa-user"></i>
+            </div>
+            <div>
+              <h3 id="detalle-chofer-nombre-titulo" class="text-2xl font-extrabold text-blue-950">Nombre Conductor</h3>
+              <p id="detalle-chofer-info-subtitulo" class="text-xs sm:text-sm text-slate-500">DNI: - | Tel: -</p>
+            </div>
+          </div>
+          <span id="badge-total-rutas-chofer-semana" class="px-4 py-1.5 bg-indigo-50 text-indigo-700 border border-indigo-200 rounded-full text-xs sm:text-sm font-bold">
+            0 Rutas Asignadas
+          </span>
+        </div>
+
+        <!-- SELECTOR INTERACTIVO POR DÍAS DE LA SEMANA -->
+        <div id="filtro-dias-semana-chofer-container" class="flex flex-wrap gap-1.5 border-b border-slate-100 pb-4"></div>
+
+        <div id="contenedor-desglose-rutas-por-dias" class="space-y-6"></div>
+      </div>
+    </section>
+
+    <!-- SECCIÓN: FLOTA BUGAMED -->
+    <section id="section-camiones" class="hidden space-y-6">
+      <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+        <div>
+          <h2 class="text-xl sm:text-2xl font-extrabold text-blue-950 flex items-center gap-2.5">
+            <i class="fa-solid fa-truck-side text-blue-600"></i> Flota Bugamed
+          </h2>
+          <p class="text-sm text-slate-500 mt-0.5">Selecciona el tipo de vehículo para consultar los camiones asignados.</p>
+        </div>
+        <button onclick="toggleModalCamion(true)" class="bg-blue-600 hover:bg-blue-700 text-white font-bold text-sm sm:text-base px-5 py-3 rounded-xl shadow-md transition-all flex items-center gap-2 cursor-pointer">
+          <i class="fa-solid fa-plus text-lg"></i> Registrar Vehículo
+        </button>
+      </div>
+
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <div onclick="filtrarCamionesPorTipo('Grande')" class="light-card light-card-hover rounded-2xl overflow-hidden cursor-pointer border border-blue-200 group">
+          <div class="h-56 bg-slate-100 relative overflow-hidden flex items-center justify-center">
+            <img src="grande.webp" alt="CAMIONES GRANDES" class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" onerror="this.onerror=null; this.src='https://images.unsplash.com/photo-1601584115197-04ecc0da31d7?auto=format&fit=crop&w=800&q=80';">
+            <div class="absolute inset-0 bg-gradient-to-t from-slate-900/60 via-transparent to-transparent"></div>
+            <span class="absolute bottom-3 left-4 text-xs font-bold px-3 py-1 bg-blue-600 text-white rounded-full">Categoría Grande</span>
+          </div>
+          <div class="p-5 space-y-2">
+            <h3 class="text-lg font-extrabold text-slate-800">CAMIONES GRANDES</h3>
+            <p class="text-xs text-slate-500">Caja pesada y gran volumen para servicios de alta capacidad.</p>
+            <p id="cnt-camiones-grandes" class="text-xs font-bold text-blue-600">0 vehículo(s) registrado(s)</p>
+          </div>
+        </div>
+
+        <div onclick="filtrarCamionesPorTipo('Pequeño')" class="light-card light-card-hover rounded-2xl overflow-hidden cursor-pointer border border-purple-200 group">
+          <div class="h-56 bg-slate-100 relative overflow-hidden flex items-center justify-center">
+            <img src="camion pequeño.webp" alt="CAMIONES PEQUEÑOS" class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" onerror="this.onerror=null; this.src='https://images.unsplash.com/photo-1559297434-fae8a1916a79?auto=format&fit=crop&w=800&q=80';">
+            <div class="absolute inset-0 bg-gradient-to-t from-slate-900/60 via-transparent to-transparent"></div>
+            <span class="absolute bottom-3 left-4 text-xs font-bold px-3 py-1 bg-purple-600 text-white rounded-full">Categoría Pequeño</span>
+          </div>
+          <div class="p-5 space-y-2">
+            <h3 class="text-lg font-extrabold text-slate-800">CAMIONES PEQUEÑOS</h3>
+            <p class="text-xs text-slate-500">Furgón ágil para reparto urbano y acceso rápido.</p>
+            <p id="cnt-camiones-pequenos" class="text-xs font-bold text-purple-600">0 vehículo(s) registrado(s)</p>
+          </div>
+        </div>
+      </div>
+
+      <div id="contenedor-filtro-camiones" class="space-y-4 pt-4 border-t border-slate-200">
+        <div class="flex justify-between items-center">
+          <h3 id="titulo-filtro-camion" class="text-lg font-bold text-slate-800">Listado de Vehículos</h3>
+          <button onclick="mostrarTodosCamiones()" class="text-xs text-slate-500 hover:text-blue-600 underline cursor-pointer">Mostrar Todos</button>
+        </div>
+        <div id="lista-camiones" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5"></div>
+      </div>
+    </section>
+
+    <!-- SECCIÓN: CHOFERES (PERSONAL BUGAMED) -->
+    <section id="section-choferes" class="hidden space-y-6">
+      <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+        <div>
+          <h2 class="text-xl sm:text-2xl font-extrabold text-blue-950 flex items-center gap-2.5">
+            <i class="fa-solid fa-users text-indigo-600"></i> Personal Bugamed · Plantilla de Conductores
+          </h2>
+          <p class="text-sm text-slate-500 mt-0.5">Estado operativo en tiempo real y datos de contacto.</p>
+        </div>
+        <button onclick="toggleModalChofer(true)" class="bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-sm sm:text-base px-5 py-3 rounded-xl shadow-md transition-all flex items-center gap-2 cursor-pointer">
+          <i class="fa-solid fa-plus text-lg"></i> Registrar Conductor
+        </button>
+      </div>
+
+      <div id="lista-choferes" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5"></div>
+    </section>
+
+    <!-- SECCIÓN: ADMIN REPOSTAJES -->
+    <section id="section-admin-gasolina" class="hidden space-y-6">
+      <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+        <div>
+          <h2 class="text-xl sm:text-2xl font-extrabold text-blue-950 flex items-center gap-2.5">
+            <i class="fa-solid fa-gas-pump text-indigo-600"></i> Panel Admin: Repostajes
+          </h2>
+          <p class="text-sm text-slate-500 mt-0.5">Control de historial, búsqueda y consumo total por conductor.</p>
+        </div>
+        <button onclick="toggleModalRepostaje(true)" class="bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-sm sm:text-base px-5 py-3 rounded-xl shadow-md transition-all flex items-center gap-2 cursor-pointer">
+          <i class="fa-solid fa-plus text-lg"></i> + Añadir Ticket
+        </button>
+      </div>
+
+      <!-- Barra de Búsqueda y Filtros de Tiempo -->
+      <div class="light-card p-4 rounded-2xl flex flex-col sm:flex-row gap-4 justify-between items-center border border-slate-200">
+        <div class="relative w-full sm:w-80">
+          <i class="fa-solid fa-magnifying-glass absolute left-3.5 top-3.5 text-slate-400"></i>
+          <input type="text" id="buscar-repostaje" oninput="renderAdminCombustible()" placeholder="Buscar por conductor o matrícula..." class="w-full bg-slate-50 border border-slate-300 rounded-xl pl-10 pr-4 py-2.5 text-sm text-slate-800 focus:outline-none focus:border-indigo-500">
+        </div>
+        <div class="flex flex-wrap gap-1.5 w-full sm:w-auto">
+          <button onclick="setFiltroTiempoCombustible('todos')" id="filtro-rep-todos" class="px-3 py-2 rounded-xl text-xs font-bold bg-indigo-600 text-white border border-indigo-600 cursor-pointer transition-all shadow-sm">Todos</button>
+          <button onclick="setFiltroTiempoCombustible('diario')" id="filtro-rep-diario" class="px-3 py-2 rounded-xl text-xs font-bold bg-slate-100 text-slate-600 border border-slate-300 hover:bg-slate-200 cursor-pointer transition-all">Diario</button>
+          <button onclick="setFiltroTiempoCombustible('semanal')" id="filtro-rep-semanal" class="px-3 py-2 rounded-xl text-xs font-bold bg-slate-100 text-slate-600 border border-slate-300 hover:bg-slate-200 cursor-pointer transition-all">Semanal</button>
+          <button onclick="setFiltroTiempoCombustible('mensual')" id="filtro-rep-mensual" class="px-3 py-2 rounded-xl text-xs font-bold bg-slate-100 text-slate-600 border border-slate-300 hover:bg-slate-200 cursor-pointer transition-all">Mensual</button>
+          <button onclick="setFiltroTiempoCombustible('anual')" id="filtro-rep-anual" class="px-3 py-2 rounded-xl text-xs font-bold bg-slate-100 text-slate-600 border border-slate-300 hover:bg-slate-200 cursor-pointer transition-all">Anual</button>
+        </div>
+      </div>
+
+      <div id="contenedor-resumen-combustible-admin" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5"></div>
+    </section>
+
+  </main>
+
+  <!-- MODAL SELECTOR VISUAL DE CONDUCTORES -->
+  <div id="modal-selector-choferes" class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 hidden">
+    <div class="light-card rounded-2xl max-w-xl w-full p-6 space-y-5 border border-blue-200 shadow-2xl">
+      <div class="flex justify-between items-center border-b border-slate-100 pb-3">
+        <h3 class="text-lg font-extrabold text-blue-950 flex items-center gap-2">
+          <i class="fa-solid fa-user-check text-blue-600"></i> Seleccionar Conductor
+        </h3>
+        <button onclick="cerrarSelectorChoferes()" class="text-slate-400 hover:text-slate-600 text-2xl cursor-pointer">&times;</button>
+      </div>
+      <div id="grid-modal-choferes-perfiles" class="grid grid-cols-2 sm:grid-cols-3 gap-4 max-h-96 overflow-y-auto custom-scrollbar p-1"></div>
+    </div>
+  </div>
+
+  <!-- MODAL SELECTOR VISUAL DE CAMIONES -->
+  <div id="modal-selector-camiones" class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 hidden">
+    <div class="light-card rounded-2xl max-w-xl w-full p-6 space-y-5 border border-blue-200 shadow-2xl">
+      <div class="flex justify-between items-center border-b border-slate-100 pb-3">
+        <h3 class="text-lg font-extrabold text-blue-950 flex items-center gap-2">
+          <i class="fa-solid fa-truck-side text-blue-600"></i> Seleccionar Vehículo
+        </h3>
+        <button onclick="cerrarSelectorCamiones()" class="text-slate-400 hover:text-slate-600 text-2xl cursor-pointer">&times;</button>
+      </div>
+      <div id="grid-modal-camiones-perfiles" class="grid grid-cols-2 sm:grid-cols-3 gap-4 max-h-96 overflow-y-auto custom-scrollbar p-1"></div>
+    </div>
+  </div>
+
+  <!-- MODAL SELECCIÓN DÍA Y RUTA ESPECÍFICA PARA INICIAR JORNADA -->
+  <div id="modal-dia-ruta" class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 hidden">
+    <div class="light-card rounded-2xl max-w-xl w-full p-6 sm:p-7 space-y-4 border border-blue-200 shadow-2xl max-h-[92vh] overflow-y-auto custom-scrollbar">
+      <div class="flex justify-between items-center border-b border-slate-100 pb-3">
+        <div>
+          <h3 class="font-extrabold text-blue-950 text-lg flex items-center gap-2">
+            <i class="fa-solid fa-route text-blue-600"></i> Seleccionar Ruta para Iniciar Jornada
+          </h3>
+          <p id="modal-dia-ruta-subtitulo" class="text-xs text-slate-500 mt-0.5">Elige el día y la ruta que vas a realizar en este momento:</p>
+        </div>
+        <button onclick="cerrarModalDiaRuta()" class="text-slate-400 hover:text-slate-600 text-2xl font-bold cursor-pointer">&times;</button>
+      </div>
+
+      <!-- Ficha de Conductor y Vehículo actual -->
+      <div class="bg-blue-50/70 border border-blue-200 rounded-xl p-3 flex flex-wrap items-center justify-between gap-2 text-xs">
+        <div class="flex items-center gap-2">
+          <i class="fa-solid fa-id-card text-blue-600 text-sm"></i>
+          <span class="text-slate-600">Conductor:</span>
+          <strong id="modal-inicio-chofer-badge" class="text-blue-950 font-extrabold">-</strong>
+        </div>
+        <div class="flex items-center gap-2">
+          <i class="fa-solid fa-truck text-indigo-600 text-sm"></i>
+          <span class="text-slate-600">Vehículo:</span>
+          <strong id="modal-inicio-camion-badge" class="text-indigo-950 font-extrabold">-</strong>
+        </div>
+      </div>
+
+      <!-- Selector de Día de la Semana -->
+      <div>
+        <label class="block text-xs font-black uppercase text-slate-700 mb-1.5 flex items-center gap-1.5">
+          <i class="fa-solid fa-calendar-day text-blue-600"></i> DÍA DE LA SEMANA
+        </label>
+        <select id="select-dia-inicio-ruta" onchange="actualizarListadoRutasParaInicio()" class="w-full px-3.5 py-2.5 bg-white border-2 border-blue-200 rounded-xl text-sm font-bold text-slate-800 focus:outline-none focus:border-blue-600 shadow-2xs">
+          <option value="Lunes">Lunes</option>
+          <option value="Martes">Martes</option>
+          <option value="Miércoles">Miércoles</option>
+          <option value="Jueves">Jueves</option>
+          <option value="Viernes">Viernes</option>
+          <option value="Sábado">Sábado</option>
+          <option value="Domingo">Domingo</option>
+        </select>
+      </div>
+
+      <!-- Listado de Rutas asignadas para ese día (Ruta 1, Ruta 2...) -->
+      <div class="space-y-2.5 pt-1">
+        <div class="flex justify-between items-center">
+          <h4 class="text-xs font-black uppercase text-slate-700 tracking-wider flex items-center gap-1.5">
+            <i class="fa-solid fa-list-check text-blue-600"></i> Rutas Asignadas para este día:
+          </h4>
+          <span id="badge-contador-rutas-modal" class="text-xs font-bold px-2.5 py-0.5 rounded-full bg-blue-100 text-blue-800 border border-blue-200">0 rutas</span>
+        </div>
+        <p class="text-[11px] text-slate-500">Haz clic en <strong>Iniciar Ruta</strong> para cargar ese recorrido en tu panel de reparto:</p>
+        <div id="contenedor-rutas-disponibles-inicio" class="space-y-3 max-h-72 overflow-y-auto custom-scrollbar pr-1"></div>
+      </div>
+
+      <div class="flex justify-end gap-2 pt-3 border-t border-slate-100">
+        <button type="button" onclick="cerrarModalDiaRuta()" class="px-5 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs rounded-xl cursor-pointer">Cancelar</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL ASIGNAR RUTA -->
+  <div id="modal-asignar-ruta" class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 hidden">
+    <div class="light-card rounded-2xl max-w-3xl w-full p-6 sm:p-8 space-y-6 border border-blue-200 shadow-2xl max-h-[90vh] overflow-y-auto custom-scrollbar">
+      <div class="flex justify-between items-start sm:items-center border-b border-slate-100 pb-4 gap-3">
+        <div class="min-w-0 flex-1">
+          <div class="flex items-center gap-2 sm:gap-3 flex-wrap">
+            <h3 id="modal-asignar-titulo" class="text-base sm:text-xl font-extrabold text-blue-950 flex items-center gap-2 flex-wrap">
+              <i class="fa-solid fa-route text-blue-600"></i>
+              <span>Asignar Ruta a <span id="modal-asignar-chofer-nombre">-</span></span>
+              <span class="text-blue-600 font-extrabold">(<span id="modal-asignar-dia-nombre" class="transition-transform duration-150 inline-block">-</span>)</span>
+            </h3>
+
+            <!-- Botones de navegación de día -->
+            <div class="inline-flex items-center gap-1 bg-slate-100/90 p-1 rounded-xl border border-slate-200/80 shadow-2xs">
+              <button type="button" id="btn-modal-asignar-dia-ant" onclick="cambiarDiaModalAsignar(-1)" class="w-7 h-7 sm:w-8 sm:h-8 rounded-lg bg-white hover:bg-blue-50 text-slate-600 hover:text-blue-700 flex items-center justify-center text-xs transition-all shadow-xs border border-slate-200 hover:border-blue-300 cursor-pointer active:scale-95" title="Día anterior">
+                <i class="fa-solid fa-chevron-left"></i>
+              </button>
+              <button type="button" id="btn-modal-asignar-dia-sig" onclick="cambiarDiaModalAsignar(1)" class="w-7 h-7 sm:w-8 sm:h-8 rounded-lg bg-white hover:bg-blue-50 text-slate-600 hover:text-blue-700 flex items-center justify-center text-xs transition-all shadow-xs border border-slate-200 hover:border-blue-300 cursor-pointer active:scale-95" title="Día siguiente">
+                <i class="fa-solid fa-chevron-right"></i>
+              </button>
+            </div>
+          </div>
+          <p id="modal-asignar-subtitulo" class="text-xs text-slate-500 mt-1">Selecciona o busca los clientes para este recorrido</p>
+        </div>
+        <button onclick="toggleModalAsignarRuta(false)" class="text-slate-400 hover:text-slate-600 text-2xl cursor-pointer p-1 rounded-lg hover:bg-slate-100 transition-colors leading-none" title="Cerrar">&times;</button>
+      </div>
+
+      <form onsubmit="guardarRutaAsignadaRapida(event)" class="space-y-5">
+        <!-- Selector interactivo de los días de la semana con contador y estado -->
+        <div class="space-y-1.5">
+          <div class="flex justify-between items-center">
+            <span class="text-xs font-bold uppercase tracking-wider text-slate-500 flex items-center gap-1.5">
+              <i class="fa-solid fa-calendar-week text-blue-600"></i> Planificación semanal por días:
+            </span>
+            <span id="badge-resumen-semana-modal" class="text-[11px] font-bold text-slate-500 bg-slate-100 px-2.5 py-0.5 rounded-full border border-slate-200">
+              0 días con clientes
+            </span>
+          </div>
+          <div id="selector-dias-pestanas-modal" class="grid grid-cols-7 gap-1 sm:gap-2 p-1.5 bg-slate-100/90 rounded-xl border border-slate-200/90">
+            <!-- Píldoras de Lunes a Domingo se inyectan dinámicamente -->
+          </div>
+        </div>
+
+        <div>
+          <label class="block text-xs font-bold uppercase text-slate-500 mb-1.5">Vehículo Asignado para esta Ruta</label>
+          <select id="asig-camion" onchange="actualizarCamionDiaModal()" class="w-full bg-blue-50/50 border border-blue-200 rounded-xl px-3.5 py-2.5 text-sm text-slate-800 focus:outline-none" required></select>
+        </div>
+
+        <div class="bg-blue-50/60 p-4 rounded-xl border border-blue-200 space-y-3">
+          <label class="block text-xs font-black uppercase text-blue-900 flex items-center gap-2">
+            <i class="fa-solid fa-magnifying-glass text-blue-600"></i> Buscador Rápido de Clientes (Autocompletar)
+          </label>
+          <div class="relative">
+            <i class="fa-solid fa-magnifying-glass absolute left-3.5 top-3.5 text-slate-400"></i>
+            <input type="text" id="input-lupa-clientes" onkeydown="if(event.key==='Enter'){event.preventDefault();}" oninput="filtrarClientesPorLupa()" placeholder="Escribe el nombre del cliente para buscar y seleccionar..." class="w-full bg-white border border-blue-300 rounded-xl pl-10 pr-4 py-2.5 text-sm text-slate-800 focus:outline-none focus:border-blue-600 shadow-2xs">
+          </div>
+          <div id="resultados-lupa-container" class="max-h-40 overflow-y-auto custom-scrollbar space-y-1.5 pt-1"></div>
+        </div>
+
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div class="bg-purple-50/40 p-4 rounded-xl border border-purple-200 space-y-3">
+            <h4 class="font-extrabold text-purple-900 text-sm flex items-center gap-2">
+              <i class="fa-solid fa-hotel text-purple-600"></i> Hoteles
+            </h4>
+            <div id="lista-checkbox-hoteles" class="space-y-2 max-h-36 overflow-y-auto custom-scrollbar pr-1"></div>
+          </div>
+
+          <div class="bg-blue-50/40 p-4 rounded-xl border border-blue-200 space-y-3">
+            <h4 class="font-extrabold text-blue-900 text-sm flex items-center gap-2">
+              <i class="fa-solid fa-utensils text-blue-600"></i> Restaurantes
+            </h4>
+            <div id="lista-checkbox-restaurantes" class="space-y-2 max-h-36 overflow-y-auto custom-scrollbar pr-1"></div>
+          </div>
+
+          <div class="bg-emerald-50/40 p-4 rounded-xl border border-emerald-200 space-y-3">
+            <h4 class="font-extrabold text-emerald-900 text-sm flex items-center gap-2">
+              <i class="fa-solid fa-layer-group text-emerald-600"></i> Establecimientos Mixtos
+            </h4>
+            <div id="lista-checkbox-mixtos" class="space-y-2 max-h-36 overflow-y-auto custom-scrollbar pr-1"></div>
+          </div>
+
+          <div class="bg-amber-50/40 p-4 rounded-xl border border-amber-200 space-y-3">
+            <h4 class="font-extrabold text-amber-900 text-sm flex items-center gap-2">
+              <i class="fa-solid fa-campground text-amber-600"></i> Campings
+            </h4>
+            <div id="lista-checkbox-campings" class="space-y-2 max-h-36 overflow-y-auto custom-scrollbar pr-1"></div>
+          </div>
+        </div>
+
+        <div class="bg-slate-50 p-3 rounded-xl border border-slate-200 space-y-2">
+          <label class="block text-xs font-bold uppercase text-slate-600">Añadir Cliente Manual (por si no aparece)</label>
+          <div class="flex gap-2">
+            <input type="text" id="input-cliente-manual-rapido" onkeydown="if(event.key==='Enter'){event.preventDefault();agregarClienteManualRapido();}" placeholder="Nombre de establecimiento..." class="flex-1 bg-white border border-slate-300 rounded-xl px-3 py-2 text-xs text-slate-800 focus:outline-none">
+            <button type="button" onclick="agregarClienteManualRapido()" class="bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 rounded-xl text-xs font-bold cursor-pointer">+ Añadir</button>
+          </div>
+          <div id="lista-manuales-temp" class="flex flex-wrap gap-1.5 pt-1"></div>
+        </div>
+
+        <div class="flex justify-end gap-3 pt-2">
+          <button type="button" onclick="toggleModalAsignarRuta(false)" class="px-5 py-2.5 bg-slate-100 text-slate-600 text-sm rounded-xl font-bold hover:bg-slate-200 cursor-pointer">Cancelar</button>
+          <button type="submit" id="btn-finalizar-asignacion-modal" class="px-6 py-2.5 bg-blue-600 hover:bg-blue-700 text-white text-sm rounded-xl font-bold shadow-md cursor-pointer flex items-center gap-2 transition-all active:scale-95">
+            <i class="fa-solid fa-check"></i> Finalizar Asignación
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- MODAL CIERRE FINAL -->
+  <div id="modal-cierre-final" class="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 flex items-center justify-center p-4 hidden">
+    <div class="light-card rounded-2xl max-w-md w-full p-6 space-y-5 border border-purple-200 shadow-xl">
+      <div class="flex justify-between items-center border-b border-slate-100 pb-3">
+        <h3 class="text-lg font-bold text-slate-800 flex items-center gap-2">
+          <i class="fa-solid fa-flag-checkered text-purple-600"></i> Cierre de Ruta
+        </h3>
+        <button onclick="toggleModalCierreFinal(false)" class="text-slate-400 hover:text-slate-600 text-2xl cursor-pointer">&times;</button>
+      </div>
+      <form onsubmit="confirmarCierreRutaDefinitivo(event)" class="space-y-4">
+        <input type="hidden" id="cierre-chofer-target" value="">
+        <div>
+          <label class="block text-xs font-bold text-slate-600 mb-1">Km Finales del Vehículo <span class="text-purple-600 font-normal">(Opcional)</span></label>
+          <input type="number" id="cierre-km" placeholder="Ej: 145200" class="w-full bg-slate-50 border border-slate-300 rounded-xl p-3 text-sm text-slate-800 focus:border-purple-500 focus:outline-none">
+        </div>
+        <div>
+          <label class="block text-xs font-bold text-slate-600 mb-1">Observaciones / Demoras en carretera</label>
+          <textarea id="cierre-observaciones" rows="2" placeholder="Ej: Retención de 20 min en A-2..." class="w-full bg-slate-50 border border-slate-300 rounded-xl p-3 text-sm text-slate-800 focus:border-purple-500 focus:outline-none"></textarea>
+        </div>
+        <div class="flex justify-end gap-3 pt-2">
+          <button type="button" onclick="toggleModalCierreFinal(false)" class="px-4 py-2.5 bg-slate-100 text-slate-600 text-sm rounded-xl font-bold hover:bg-slate-200 cursor-pointer">Cancelar</button>
+          <button type="submit" class="px-5 py-2.5 bg-purple-600 hover:bg-purple-700 text-white text-sm rounded-xl font-bold cursor-pointer">Finalizar Servicio</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- MODAL REPOSTAJE -->
+  <div id="modal-repostaje" class="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 flex items-center justify-center p-4 hidden">
+    <div class="light-card rounded-2xl max-w-md w-full p-6 space-y-5 border border-indigo-200 shadow-xl">
+      <div class="flex justify-between items-center border-b border-slate-100 pb-3">
+        <h3 class="text-lg font-bold text-slate-800 flex items-center gap-2">
+          <i class="fa-solid fa-gas-pump text-indigo-600"></i> Suministro de Combustible
+        </h3>
+        <button onclick="toggleModalRepostaje(false)" class="text-slate-400 hover:text-slate-600 text-2xl cursor-pointer">&times;</button>
+      </div>
+      <form onsubmit="guardarRepostaje(event)" class="space-y-4">
+        <div id="dropdown-chofer-container" class="relative">
+          <label class="block text-xs font-bold uppercase text-slate-600 mb-1">Conductor / Chófer</label>
+          <input type="hidden" id="rep-chofer">
+
+          <button type="button" id="btn-rep-chofer" onclick="toggleDropdownChoferes()" class="w-full bg-slate-50 hover:bg-slate-100 border border-slate-300 rounded-xl p-2.5 text-sm text-slate-800 flex justify-between items-center cursor-pointer transition-all focus:outline-none focus:border-indigo-500">
+            <span id="text-rep-chofer" class="text-slate-500">Seleccionar conductor...</span>
+            <i class="fa-solid fa-chevron-down text-slate-400 text-xs"></i>
+          </button>
+
+          <div id="menu-dropdown-chofer" class="absolute z-50 w-full mt-1.5 bg-white border border-slate-200 rounded-xl shadow-xl hidden overflow-hidden">
+            <ul id="lista-opciones-choferes" class="max-h-48 overflow-y-auto divide-y divide-slate-100 custom-scrollbar"></ul>
+          </div>
+        </div>
+
+        <div id="dropdown-camion-container" class="relative">
+          <label class="block text-xs font-bold uppercase text-slate-600 mb-1">Matrícula Vehículo</label>
+          <input type="hidden" id="rep-camion">
+
+          <button type="button" id="btn-rep-camion" onclick="toggleDropdownCamiones()" class="w-full bg-slate-50 hover:bg-slate-100 border border-slate-300 rounded-xl p-2.5 text-sm text-slate-800 flex justify-between items-center cursor-pointer transition-all focus:outline-none focus:border-indigo-500">
+            <span id="text-rep-camion" class="text-slate-500">Seleccionar vehículo...</span>
+            <i class="fa-solid fa-chevron-down text-slate-400 text-xs"></i>
+          </button>
+
+          <div id="menu-dropdown-camion" class="absolute z-50 w-full mt-1.5 bg-white border border-slate-200 rounded-xl shadow-xl hidden overflow-hidden">
+            <ul id="lista-opciones-camiones" class="max-h-48 overflow-y-auto divide-y divide-slate-100 custom-scrollbar"></ul>
+          </div>
+        </div>
+
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div>
+            <label class="block text-xs font-bold uppercase text-slate-600 mb-1">Litros (L) *</label>
+            <input type="number" step="0.01" id="rep-litros" required placeholder="0.00" class="w-full bg-slate-50 border border-slate-300 rounded-xl p-2.5 text-sm text-slate-800 focus:outline-none focus:border-indigo-500">
+          </div>
+          <div>
+            <label class="block text-xs font-bold uppercase text-slate-600 mb-1">Importe (€) *</label>
+            <input type="number" step="0.01" id="rep-euros" required placeholder="0.00" class="w-full bg-slate-50 border border-slate-300 rounded-xl p-2.5 text-sm text-slate-800 focus:outline-none focus:border-indigo-500">
+          </div>
+          <div>
+            <label class="block text-xs font-bold uppercase text-slate-600 mb-1">Kilómetros (KM) *</label>
+            <input type="number" step="any" id="rep-km" required placeholder="Ej: 145000" class="w-full bg-slate-50 border border-slate-300 rounded-xl p-2.5 text-sm text-slate-800 focus:outline-none focus:border-indigo-500">
+          </div>
+          <div>
+            <label class="block text-xs font-bold uppercase text-slate-600 mb-1">AdBlue (L) - Opcional</label>
+            <input type="number" step="0.01" id="rep-adblue" placeholder="0.00 (Opcional)" class="w-full bg-slate-50 border border-slate-300 rounded-xl p-2.5 text-sm text-slate-800 focus:outline-none focus:border-indigo-500">
+          </div>
+        </div>
+
+        <div class="flex justify-end gap-3 pt-2">
+          <button type="button" onclick="toggleModalRepostaje(false)" class="px-4 py-2 bg-slate-100 text-slate-600 text-sm rounded-xl font-bold hover:bg-slate-200 cursor-pointer">Cancelar</button>
+          <button type="submit" class="px-5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-sm rounded-xl font-bold cursor-pointer">Guardar Ticket</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- MODAL INCIDENCIA -->
+  <div id="modal-incidencia" class="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 flex items-center justify-center p-4 hidden">
+    <div class="light-card rounded-2xl max-w-md w-full p-6 space-y-5 border border-purple-200 shadow-xl">
+      <div class="flex justify-between items-center border-b border-slate-100 pb-3">
+        <h3 class="text-lg font-bold text-slate-800 flex items-center gap-2">
+          <i class="fa-solid fa-triangle-exclamation text-red-600"></i> Incidencia de Vehículo
+        </h3>
+        <button onclick="toggleModalIncidencia(false)" class="text-slate-400 hover:text-slate-600 text-2xl cursor-pointer">&times;</button>
+      </div>
+      <form onsubmit="guardarIncidencia(event)" class="space-y-4">
+        <div>
+          <label class="block text-xs font-bold uppercase text-slate-500 mb-1">Categoría Avería</label>
+          <select id="inc-categoria" class="w-full bg-blue-50/50 border border-blue-200 rounded-xl p-2.5 text-sm text-slate-800 focus:ring-2 focus:ring-blue-100 focus:outline-none transition-all">
+            <option value="Neumáticos">Neumáticos</option>
+            <option value="Motor">Motor</option>
+            <option value="Luces">Luces</option>
+            <option value="Fuga">Fuga</option>
+            <option value="Otros">Otros</option>
+          </select>
+        </div>
+        <div>
+          <label class="block text-xs font-bold uppercase text-slate-500 mb-1">Vehículo Afectado</label>
+          <select id="inc-camion" class="w-full bg-blue-50/50 border border-blue-200 rounded-xl p-2.5 text-sm text-slate-800 focus:ring-2 focus:ring-blue-100 focus:outline-none transition-all"></select>
+        </div>
+        <div>
+          <label class="block text-xs font-bold uppercase text-slate-500 mb-1">Nota Explicativa</label>
+          <textarea id="inc-nota" required rows="3" placeholder="Describe el fallo..." class="w-full bg-slate-50 border border-slate-300 rounded-xl p-2.5 text-sm text-slate-800"></textarea>
+        </div>
+        <div class="flex justify-end gap-3 pt-2">
+          <button type="button" onclick="toggleModalIncidencia(false)" class="px-4 py-2 bg-slate-100 text-slate-600 text-sm rounded-xl font-bold hover:bg-slate-200 cursor-pointer">Cancelar</button>
+          <button type="submit" class="px-5 py-2 bg-purple-600 hover:bg-purple-700 text-white text-sm rounded-xl font-bold cursor-pointer">Enviar Alerta Taller</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- MODAL CLIENTE (CREACIÓN Y EDICIÓN CON SOPORTE DE UBICACIÓN GOOGLE MAPS) -->
+  <div id="modal-cliente" class="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 flex items-center justify-center p-4 hidden">
+    <div class="light-card rounded-2xl max-w-lg w-full p-6 sm:p-8 space-y-6 border border-purple-200 shadow-xl max-h-[92vh] overflow-y-auto custom-scrollbar">
+      <div class="flex justify-between items-center border-b border-slate-100 pb-4">
+        <div>
+          <h3 id="modal-cliente-titulo" class="text-lg font-bold text-slate-800 flex items-center gap-2">
+            <i class="fa-solid fa-hotel text-purple-600"></i> Registrar Nuevo Cliente
+          </h3>
+          <p id="modal-cliente-subtitulo" class="text-xs text-slate-500 mt-0.5">Completa la información del establecimiento y su ubicación exacta</p>
+        </div>
+        <button onclick="toggleModalCliente(false)" class="text-slate-400 hover:text-slate-600 text-2xl font-bold cursor-pointer">&times;</button>
+      </div>
+
+      <form id="form-cliente" onsubmit="agregarClienteDirecto(event)" class="space-y-4">
+        <input type="hidden" id="cli-edit-index" value="">
+        <div>
+          <label class="block text-xs font-bold uppercase text-slate-500 mb-1.5">Nombre del Cliente / Establecimiento</label>
+          <input type="text" id="cli-nombre" required placeholder="Ej: Hotel Meliá Palma" class="w-full bg-slate-50 border border-slate-300 rounded-xl px-3.5 py-2.5 text-sm text-slate-800 focus:border-purple-500">
+        </div>
+        <div>
+          <label class="block text-xs font-bold uppercase text-slate-500 mb-1.5">Zona / Población</label>
+          <input type="text" id="cli-zona" required placeholder="Ej: Tarragona, Salou, Cambrils..." class="w-full bg-slate-50 border border-slate-300 rounded-xl px-3.5 py-2.5 text-sm text-slate-800 focus:border-purple-500">
+        </div>
+        <div>
+          <label class="block text-xs font-bold uppercase text-slate-500 mb-1.5">Tipo de Establecimiento</label>
+          <select id="cli-tipo" class="w-full bg-blue-50/50 border border-blue-200 rounded-xl px-3.5 py-2.5 text-sm text-slate-800 focus:ring-2 focus:ring-blue-100 focus:outline-none transition-all">
+            <option value="Hoteles">Hotel</option>
+            <option value="Restaurantes">Restaurante</option>
+            <option value="Mixto">Mixto</option>
+            <option value="Camping">Camping</option>
+          </select>
+        </div>
+        <div>
+          <label class="block text-xs font-bold uppercase text-slate-500 mb-1.5">Dirección Detallada</label>
+          <input type="text" id="cli-direccion" placeholder="Ej: Av. Gabriel Roca 12" class="w-full bg-slate-50 border border-slate-300 rounded-xl px-3.5 py-2.5 text-sm text-slate-800 focus:border-purple-500">
+        </div>
+        <div>
+          <label class="block text-xs font-bold uppercase text-slate-500 mb-1.5">Teléfono de Contacto</label>
+          <input type="tel" id="cli-telefono" placeholder="Ej: +34 971 000 000" class="w-full bg-slate-50 border border-slate-300 rounded-xl px-3.5 py-2.5 text-sm text-slate-800 focus:border-purple-500">
+        </div>
+
+        <!-- CAMPO Y SELECTOR DE UBICACIÓN GOOGLE MAPS / GPS -->
+        <div class="bg-purple-50/60 p-4 rounded-xl border border-purple-200 space-y-2.5">
+          <label class="block text-xs font-extrabold uppercase text-purple-900 flex items-center justify-between">
+            <span class="flex items-center gap-1.5">
+              <i class="fa-solid fa-map-location-dot text-purple-600"></i> Ubicación Google Maps (Navegación GPS)
+            </span>
+            <span class="text-[10px] text-purple-700 font-bold bg-purple-100 px-2 py-0.5 rounded">Para chóferes</span>
+          </label>
+          <input type="text" id="cli-ubicacion" placeholder="Pega enlace de Google Maps o coordenadas (Ej: 41.1189, 1.2445)" class="w-full bg-white border border-purple-300 rounded-xl px-3.5 py-2.5 text-xs text-slate-800 focus:outline-none focus:border-purple-600 shadow-2xs font-mono">
+          
+          <div class="flex flex-wrap gap-1.5 pt-1">
+            <button type="button" onclick="buscarUbicacionEnMapsForm()" class="px-2.5 py-1.5 bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 rounded-lg text-xs font-bold flex items-center gap-1 cursor-pointer transition-colors" title="Buscar en Google Maps con los datos del formulario">
+              <i class="fa-solid fa-magnifying-glass-location"></i> Buscar en Maps
+            </button>
+            <button type="button" onclick="capturarCoordenadasActualesForm()" class="px-2.5 py-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 rounded-lg text-xs font-bold flex items-center gap-1 cursor-pointer transition-colors" title="Obtener coordenadas GPS del dispositivo">
+              <i class="fa-solid fa-crosshairs"></i> Mi GPS Actual
+            </button>
+            <button type="button" onclick="probarUbicacionMapsForm()" class="px-2.5 py-1.5 bg-purple-100 hover:bg-purple-200 text-purple-800 border border-purple-300 rounded-lg text-xs font-bold flex items-center gap-1 cursor-pointer transition-colors" title="Abrir y verificar la ubicación en Google Maps">
+              <i class="fa-solid fa-arrow-up-right-from-square"></i> Probar Ubicación
+            </button>
+          </div>
+          <p class="text-[10px] text-slate-500">
+            Asegura que el chófer pueda abrir Google Maps en tiempo real directamente hasta la puerta del cliente con un solo clic.
+          </p>
+        </div>
+
+        <div class="flex justify-end gap-3 pt-2">
+          <button type="button" onclick="toggleModalCliente(false)" class="px-5 py-2.5 bg-slate-100 text-slate-600 text-sm rounded-xl font-bold hover:bg-slate-200 cursor-pointer">Cancelar</button>
+          <button type="submit" id="btn-guardar-cliente" class="px-6 py-2.5 bg-purple-600 hover:bg-purple-700 text-white text-sm rounded-xl font-bold shadow-md cursor-pointer">Guardar Cliente</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- MODAL CAMIÓN -->
+  <div id="modal-camion" class="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 flex items-center justify-center p-4 hidden">
+    <div class="light-card rounded-2xl max-w-md w-full p-6 sm:p-8 space-y-6 border border-blue-200 shadow-xl">
+      <div class="flex justify-between items-center border-b border-slate-100 pb-4">
+        <h3 class="text-lg font-bold text-slate-800 flex items-center gap-2">
+          <i class="fa-solid fa-truck-side text-blue-600"></i> Registrar Nuevo Vehículo
+        </h3>
+        <button onclick="toggleModalCamion(false)" class="text-slate-400 hover:text-slate-600 text-2xl cursor-pointer">&times;</button>
+      </div>
+
+      <form id="form-camion" onsubmit="agregarCamion(event)" class="space-y-4">
+        <div>
+          <label class="block text-xs font-bold uppercase text-slate-500 mb-1.5">Matrícula</label>
+          <input type="text" id="camion-matricula" required placeholder="Ej: 9876-LMN" class="w-full bg-slate-50 border border-slate-300 rounded-xl px-3.5 py-2.5 text-sm text-slate-800 focus:border-blue-500">
+        </div>
+        <div>
+          <label class="block text-xs font-bold uppercase text-slate-500 mb-1.5">Modelo / Marca</label>
+          <input type="text" id="camion-modelo" required placeholder="Ej: Mercedes Sprinter / Iveco Stralis" class="w-full bg-slate-50 border border-slate-300 rounded-xl px-3.5 py-2.5 text-sm text-slate-800 focus:border-blue-500">
+        </div>
+        <div>
+          <label class="block text-xs font-bold uppercase text-slate-500 mb-1.5">Categoría / Capacidad</label>
+          <select id="camion-tipo" class="w-full bg-blue-50/50 border border-blue-200 rounded-xl px-3.5 py-2.5 text-sm text-slate-800 focus:ring-2 focus:ring-blue-100 focus:outline-none transition-all">
+            <option value="Grande">CAMIONES GRANDES</option>
+            <option value="Pequeño">CAMIONES PEQUEÑOS</option>
+          </select>
+        </div>
+        <div>
+          <label class="block text-xs font-bold uppercase text-slate-500 mb-1.5">Foto del Camión (URL o Ruta)</label>
+          <input type="text" id="camion-foto-input" placeholder="Ej: camion1.webp o URL de imagen" class="w-full bg-slate-50 border border-slate-300 rounded-xl px-3.5 py-2.5 text-sm text-slate-800 focus:border-blue-500">
+        </div>
+        <div id="preview-camion-subida"></div>
+
+        <div class="flex justify-end gap-3 pt-2">
+          <button type="button" onclick="toggleModalCamion(false)" class="px-5 py-2.5 bg-slate-100 text-slate-600 text-sm rounded-xl font-bold hover:bg-slate-200 cursor-pointer">Cancelar</button>
+          <button type="submit" class="px-6 py-2.5 bg-blue-600 hover:bg-blue-700 text-white text-sm rounded-xl font-bold shadow-md cursor-pointer">Guardar Vehículo</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- MODAL CHOFER -->
+  <div id="modal-chofer" class="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 flex items-center justify-center p-4 hidden">
+    <div class="light-card rounded-2xl max-w-md w-full p-6 sm:p-8 space-y-6 border border-indigo-200 shadow-xl">
+      <div class="flex justify-between items-center border-b border-slate-100 pb-4">
+        <h3 class="text-lg font-bold text-slate-800 flex items-center gap-2">
+          <i class="fa-solid fa-user-plus text-indigo-600"></i> Registrar Conductor
+        </h3>
+        <button onclick="toggleModalChofer(false)" class="text-slate-400 hover:text-slate-600 text-2xl cursor-pointer">&times;</button>
+      </div>
+
+      <form id="form-chofer" onsubmit="agregarChofer(event)" class="space-y-4">
+        <input type="hidden" id="chofer-edit-index" value="">
+        <div>
+          <label class="block text-xs font-bold uppercase text-slate-500 mb-1.5">Nombre Completo</label>
+          <input type="text" id="chofer-nombre" required placeholder="Ej: Manuel García" class="w-full bg-slate-50 border border-slate-300 rounded-xl px-3.5 py-2.5 text-sm text-slate-800 focus:border-indigo-500">
+        </div>
+        <div>
+          <label class="block text-xs font-bold uppercase text-slate-500 mb-1.5">DNI / NIE</label>
+          <input type="text" id="chofer-dni" required placeholder="Ej: 12345678X" class="w-full bg-slate-50 border border-slate-300 rounded-xl px-3.5 py-2.5 text-sm text-slate-800 focus:border-indigo-500">
+        </div>
+        <div>
+          <label class="block text-xs font-bold uppercase text-slate-500 mb-1.5">Teléfono Móvil</label>
+          <input type="tel" id="chofer-telefono" required placeholder="Ej: +34 600 000 000" class="w-full bg-slate-50 border border-slate-300 rounded-xl px-3.5 py-2.5 text-sm text-slate-800 focus:border-indigo-500">
+        </div>
+        <div>
+          <label class="block text-xs font-bold uppercase text-slate-500 mb-1.5">Foto de Perfil (URL o Ruta)</label>
+          <input type="text" id="chofer-foto-input" placeholder="Ej: antonio.jpg o URL de imagen" class="w-full bg-slate-50 border border-slate-300 rounded-xl px-3.5 py-2.5 text-sm text-slate-800 focus:border-indigo-500">
+        </div>
+        <div id="preview-chofer-subida"></div>
+
+        <div class="flex justify-end gap-3 pt-2">
+          <button type="button" onclick="toggleModalChofer(false)" class="px-5 py-2.5 bg-slate-100 text-slate-600 text-sm rounded-xl font-bold hover:bg-slate-200 cursor-pointer">Cancelar</button>
+          <button type="submit" class="px-6 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white text-sm rounded-xl font-bold shadow-md cursor-pointer">Guardar Conductor</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- MODAL / TECLADO NUMÉRICO TÁCTIL ESTILO CALCULADORA -->
+  <div id="modal-teclado-numerico" class="fixed inset-0 bg-slate-900/40 backdrop-blur-xs z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 hidden">
+    <div class="light-card rounded-t-3xl sm:rounded-2xl max-w-xs w-full p-5 space-y-4 border border-blue-200 shadow-2xl bg-white/95 animate-in fade-in slide-in-from-bottom duration-200">
+      <div class="flex justify-between items-center border-b border-slate-100 pb-2">
+        <div>
+          <h4 id="teclado-titulo-input" class="font-extrabold text-blue-950 text-sm">Introducir Cantidad</h4>
+          <p class="text-[10px] text-slate-500">Usa el teclado táctil</p>
+        </div>
+        <button type="button" onclick="cerrarTecladoNumerico()" class="text-slate-400 hover:text-slate-600 text-xl font-bold px-2 cursor-pointer">&times;</button>
+      </div>
+
+      <div class="bg-slate-100 border border-slate-200 rounded-xl px-4 py-3 text-right">
+        <span id="teclado-valor-actual" class="text-2xl font-black text-blue-900">0</span>
+      </div>
+
+      <div class="grid grid-cols-3 gap-2">
+        <button type="button" onclick="tecladoBotonClick('1')" class="py-3 bg-slate-50 hover:bg-blue-50 active:bg-blue-100 text-slate-800 font-extrabold rounded-xl border border-slate-200 text-lg shadow-2xs cursor-pointer">1</button>
+        <button type="button" onclick="tecladoBotonClick('2')" class="py-3 bg-slate-50 hover:bg-blue-50 active:bg-blue-100 text-slate-800 font-extrabold rounded-xl border border-slate-200 text-lg shadow-2xs cursor-pointer">2</button>
+        <button type="button" onclick="tecladoBotonClick('3')" class="py-3 bg-slate-50 hover:bg-blue-50 active:bg-blue-100 text-slate-800 font-extrabold rounded-xl border border-slate-200 text-lg shadow-2xs cursor-pointer">3</button>
+        
+        <button type="button" onclick="tecladoBotonClick('4')" class="py-3 bg-slate-50 hover:bg-blue-50 active:bg-blue-100 text-slate-800 font-extrabold rounded-xl border border-slate-200 text-lg shadow-2xs cursor-pointer">4</button>
+        <button type="button" onclick="tecladoBotonClick('5')" class="py-3 bg-slate-50 hover:bg-blue-50 active:bg-blue-100 text-slate-800 font-extrabold rounded-xl border border-slate-200 text-lg shadow-2xs cursor-pointer">5</button>
+        <button type="button" onclick="tecladoBotonClick('6')" class="py-3 bg-slate-50 hover:bg-blue-50 active:bg-blue-100 text-slate-800 font-extrabold rounded-xl border border-slate-200 text-lg shadow-2xs cursor-pointer">6</button>
+        
+        <button type="button" onclick="tecladoBotonClick('7')" class="py-3 bg-slate-50 hover:bg-blue-50 active:bg-blue-100 text-slate-800 font-extrabold rounded-xl border border-slate-200 text-lg shadow-2xs cursor-pointer">7</button>
+        <button type="button" onclick="tecladoBotonClick('8')" class="py-3 bg-slate-50 hover:bg-blue-50 active:bg-blue-100 text-slate-800 font-extrabold rounded-xl border border-slate-200 text-lg shadow-2xs cursor-pointer">8</button>
+        <button type="button" onclick="tecladoBotonClick('9')" class="py-3 bg-slate-50 hover:bg-blue-50 active:bg-blue-100 text-slate-800 font-extrabold rounded-xl border border-slate-200 text-lg shadow-2xs cursor-pointer">9</button>
+        
+        <button type="button" onclick="tecladoBotonBorrar()" class="py-3 bg-red-50 hover:bg-red-100 text-red-700 font-extrabold rounded-xl border border-red-200 text-sm shadow-2xs cursor-pointer flex items-center justify-center"><i class="fa-solid fa-delete-left"></i></button>
+        <button type="button" onclick="tecladoBotonClick('0')" class="py-3 bg-slate-50 hover:bg-blue-50 active:bg-blue-100 text-slate-800 font-extrabold rounded-xl border border-slate-200 text-lg shadow-2xs cursor-pointer">0</button>
+        <button type="button" onclick="tecladoBotonLimpiar()" class="py-3 bg-amber-50 hover:bg-amber-100 text-amber-700 font-extrabold rounded-xl border border-amber-200 text-xs shadow-2xs cursor-pointer">AC</button>
+      </div>
+
+      <button type="button" onclick="cerrarTecladoNumerico()" class="w-full py-3 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl shadow-md text-sm cursor-pointer">
+        Aceptar / OK
+      </button>
+    </div>
+  </div>
+
+  <footer class="border-t border-slate-200 bg-white py-5 mt-auto z-10 relative">
+    <div class="max-w-7xl mx-auto px-4 text-center text-xs sm:text-sm text-slate-500 flex items-center justify-center gap-2">
+      <span>BugamedApp © 2026 - Equipo de logística & Transporte</span>
+    </div>
+  </footer>
+
+  <script src="js/state.js"></script>
+  <script src="js/admin.js"></script>
+  <script src="js/logistica.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>
