@@ -1,107 +1,6 @@
-/* --- REPOSTAJES --- */
-window.toggleModalRepostaje = function(show) { 
-  const m = document.getElementById('modal-repostaje');
-  if (m) {
-    if (show) {
-      const listaOpciones = document.getElementById('lista-opciones-camiones');
-      const listaOpcionesChoferes = document.getElementById('lista-opciones-choferes');
-      if (((listaOpciones && (!listaOpciones.children || listaOpciones.children.length === 0)) ||
-           (listaOpcionesChoferes && (!listaOpcionesChoferes.children || listaOpcionesChoferes.children.length === 0))) && typeof camiones !== 'undefined') {
-        renderModuloLogistica();
-      }
-    } else {
-      const menu = document.getElementById('menu-dropdown-camion');
-      if (menu) menu.classList.add('hidden');
-      const menuChofer = document.getElementById('menu-dropdown-chofer');
-      if (menuChofer) menuChofer.classList.add('hidden');
-    }
-    m.classList.toggle('hidden', !show); 
-  }
-};
-
-window.guardarRepostaje = function(e) {
-  if (e) e.preventDefault();
-  const inputChofer = document.getElementById('rep-chofer');
-  const chofer = (inputChofer && inputChofer.value && inputChofer.value.trim()) ? inputChofer.value.trim() : 'General';
-  const camion = document.getElementById('rep-camion')?.value || '';
-
-  if (!camion) {
-    alert('Por favor, selecciona una matrícula de vehículo.');
-    return;
-  }
-
-  repostajes.unshift({
-    fecha: new Date().toISOString().split('T')[0],
-    camion: camion,
-    litros: document.getElementById('rep-litros')?.value || '',
-    euros: document.getElementById('rep-euros')?.value || '',
-    km: document.getElementById('rep-km')?.value || '',
-    adblue: document.getElementById('rep-adblue')?.value || '',
-    chofer: chofer
-  });
-  guardarDatosEnLocal();
-  toggleModalRepostaje(false);
-  if (e && e.target && typeof e.target.reset === 'function') {
-    e.target.reset();
-  } else {
-    const form = document.querySelector('#modal-repostaje form');
-    if (form) form.reset();
-  }
-  const inputCamion = document.getElementById('rep-camion');
-  if (inputCamion) inputCamion.value = '';
-  const textRepCamion = document.getElementById('text-rep-camion');
-  if (textRepCamion) {
-    textRepCamion.textContent = 'Seleccionar vehículo...';
-    textRepCamion.classList.remove('font-bold', 'text-blue-950');
-    textRepCamion.classList.add('text-slate-500');
-  }
-  const menuCam = document.getElementById('menu-dropdown-camion');
-  if (menuCam) menuCam.classList.add('hidden');
-
-  const inputChoferElem = document.getElementById('rep-chofer');
-  if (inputChoferElem) inputChoferElem.value = '';
-  const textRepChofer = document.getElementById('text-rep-chofer');
-  if (textRepChofer) {
-    textRepChofer.textContent = 'Seleccionar conductor...';
-    textRepChofer.classList.remove('font-bold', 'text-indigo-950');
-    textRepChofer.classList.add('text-slate-500');
-  }
-  const menuChofer = document.getElementById('menu-dropdown-chofer');
-  if (menuChofer) menuChofer.classList.add('hidden');
-
-  renderRepostajes();
-  if (typeof renderAdminCombustible === 'function') renderAdminCombustible();
-};
-
-function renderRepostajes() {
-  const container = document.getElementById('lista-repostajes');
-  if (!container) return;
-  if (repostajes.length === 0) {
-    container.innerHTML = '<p class="text-xs text-slate-500 italic">Sin repostajes.</p>';
-    return;
-  }
-  container.innerHTML = repostajes.map((r, index) => `
-    <div class="bg-slate-50 p-3 rounded-xl border border-slate-200 flex justify-between items-center text-xs">
-      <div>
-        <p class="font-bold text-slate-800"><i class="fa-solid fa-gas-pump text-indigo-600"></i> ${r.tipo ? `${r.tipo} - ` : ''}${r.camion}</p>
-        <p class="text-slate-500">${r.fecha} | ${r.litros} L${r.km ? ` | ${r.km} KM` : ''} | <span class="font-semibold text-slate-700">${r.chofer || 'General'}</span></p>
-      </div>
-      <div class="flex items-center gap-3">
-        <span class="font-bold text-indigo-700 text-sm">${r.euros} €</span>
-        <button onclick="eliminarRepostajeAdmin(${index})" class="text-slate-400 hover:text-red-500 p-1 cursor-pointer" title="Eliminar suministro por error"><i class="fa-solid fa-trash-can"></i></button>
-      </div>
-    </div>
-  `).join('');
-}
-
-window.eliminarRepostajeAdmin = function(index) {
-  if (confirm('¿Estás seguro de eliminar este registro de suministro de combustible añadido por error?')) {
-    repostajes.splice(index, 1);
-    guardarDatosEnLocal();
-    renderRepostajes();
-    if (typeof renderAdminCombustible === 'function') renderAdminCombustible();
-  }
-};
+/* --- REPOSTAJES & LOGÍSTICA --- */
+// Las funciones principales de repostajes (guardarRepostaje, eliminarRepostajeAdmin, renderRepostajes)
+// y su sincronización en tiempo real con Supabase residen de forma centralizada en admin.js y supabase.js.
 
 /* --- LOGÍSTICA & INICIO DE RUTA CON TARJETAS DE PERFIL --- */
 function renderModuloLogistica() {
@@ -855,11 +754,25 @@ window.guardarEnvasesCliente = function(chofer, clienteNombre, idx) {
   mostrarToastLogistica(`✓ Parada guardada (${clienteNombre}): ${entregados} entregados | ${recogidos} recogidos`);
 };
 
-window.prepararCierreRutaModal = function(choferTarget) {
+window.prepararCierreRutaModal = function(choferTarget, rutaId = null) {
   const modal = document.getElementById('modal-cierre-final');
   const inputTarget = document.getElementById('cierre-chofer-target');
+  let inputRutaId = document.getElementById('cierre-ruta-id');
+  const titModal = document.getElementById('cierre-modal-titulo');
+
   if (modal && inputTarget) {
-    inputTarget.value = choferTarget;
+    inputTarget.value = choferTarget || '';
+    if (!inputRutaId) {
+      inputRutaId = document.createElement('input');
+      inputRutaId.type = 'hidden';
+      inputRutaId.id = 'cierre-ruta-id';
+      modal.querySelector('form')?.appendChild(inputRutaId);
+    }
+    inputRutaId.value = rutaId || '';
+
+    if (titModal) {
+      titModal.innerText = choferTarget ? `Cierre de Ruta - ${choferTarget}` : 'Cierre de Ruta';
+    }
     modal.classList.remove('hidden');
   }
 };
@@ -869,27 +782,25 @@ window.toggleModalCierreFinal = function(show) {
   if (m) m.classList.toggle('hidden', !show);
 };
 
-window.confirmarCierreRutaDefinitivo = function(e) {
+window.confirmarCierreRutaDefinitivo = async function(e) {
   if (e && typeof e.preventDefault === 'function') e.preventDefault();
   const choferTarget = document.getElementById('cierre-chofer-target')?.value;
-  if (!choferTarget || !serviciosActivos[choferTarget]) {
-    alert('No se ha encontrado el servicio activo para este conductor.');
-    return;
-  }
+  const rutaIdTarget = document.getElementById('cierre-ruta-id')?.value;
 
-  const servicio = serviciosActivos[choferTarget];
   const kmInput = document.getElementById('cierre-km');
   const obsInput = document.getElementById('cierre-observaciones');
 
   const km = kmInput ? (kmInput.value.trim() || 'No especificado') : 'No especificado';
   const obs = obsInput ? (obsInput.value.trim() || 'Sin observaciones') : 'Sin observaciones';
 
+  const servicio = (typeof serviciosActivos !== 'undefined' && choferTarget) ? serviciosActivos[choferTarget] : null;
+
   // RECOPILAMOS EL DETALLE DE CARROS POR CLIENTE (con valores guardados o en pantalla)
   const detalleClientes = [];
-  if (servicio.clientes && servicio.clientes.length > 0) {
+  if (servicio && servicio.clientes && servicio.clientes.length > 0) {
     servicio.clientes.forEach((clienteNombre, cIdx) => {
       const key = `${servicio.chofer}_${clienteNombre}`;
-      const env = envasesPorClienteRuta[key];
+      const env = (typeof envasesPorClienteRuta !== 'undefined') ? envasesPorClienteRuta[key] : null;
       const elEnt = document.getElementById(`env-entregados-${servicio.chofer}-${cIdx}`);
       const elRec = document.getElementById(`env-recogidos-${servicio.chofer}-${cIdx}`);
       const entregados = elEnt ? (parseInt(elEnt.value, 10) || 0) : (env?.entregados || 0);
@@ -902,79 +813,69 @@ window.confirmarCierreRutaDefinitivo = function(e) {
     });
   }
 
-  const c = camiones.find(v => v.matricula === servicio.camion);
-  if (c) c.estado = 'Libre';
-
-  // 1. Marcar la ruta como 'completada' de forma permanente en el listado de rutas
-  let rutaOriginal = null;
-  if (servicio.rutaId) {
-    rutaOriginal = rutas.find(r => r.id === servicio.rutaId);
-  }
-  if (!rutaOriginal) {
-    rutaOriginal = rutas.find(r => 
-      r.chofer && r.chofer.trim().toLowerCase() === servicio.chofer.trim().toLowerCase() &&
-      r.dia && r.dia.trim().toLowerCase() === (servicio.dia || '').trim().toLowerCase() &&
-      r.estado !== 'completada' && r.estado !== 'finalizada'
-    );
+  // Identificar el ID de la ruta
+  let targetRutaId = rutaIdTarget || servicio?.rutaId;
+  if (!targetRutaId && choferTarget) {
+    const rutaEncontrada = (typeof rutas !== 'undefined' && Array.isArray(rutas))
+      ? rutas.find(r => 
+          (r.chofer === choferTarget || r.conductor === choferTarget) &&
+          r.estado !== 'completada' && r.estado !== 'finalizada' && r.estado !== 'archivada'
+        )
+      : null;
+    if (rutaEncontrada) targetRutaId = rutaEncontrada.id;
   }
 
-  const fechaHoy = new Date().toISOString().split('T')[0];
-  const horaFin = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-
-  if (rutaOriginal) {
-    rutaOriginal.estado = 'completada';
-    rutaOriginal.fechaCompletada = fechaHoy;
-    rutaOriginal.horaInicio = servicio.inicio;
-    rutaOriginal.horaFin = horaFin;
-    rutaOriginal.km = km;
-    rutaOriginal.obs = obs;
-    rutaOriginal.detalleClientes = detalleClientes;
-    if (typeof actualizarEstadoRutaSupabase === 'function' && rutaOriginal.id) {
-      actualizarEstadoRutaSupabase(rutaOriginal.id, 'completada');
-    }
-  }
-
-  // 2. Mover / guardar en el historial específico de rutas completadas de ese chofer
-  const rutaFinalizadaHistorial = {
-    id: servicio.rutaId || ('hist_' + Date.now() + '_' + Math.random().toString(36).substr(2, 6)),
-    fecha: fechaHoy,
-    dia: servicio.dia || 'General',
-    chofer: servicio.chofer,
-    camion: servicio.camion,
-    rutaNombre: servicio.rutaNombre || 'Ruta 1',
-    km: km,
-    obs: obs,
-    horaInicio: servicio.inicio,
-    horaFin: horaFin,
-    detalleClientes: detalleClientes,
-    estado: 'completada'
-  };
-
-  historialFinalizadas.unshift(rutaFinalizadaHistorial);
-
-  // Limpiar envases temporales del servicio activo
-  if (servicio.clientes) {
-    servicio.clientes.forEach(clienteNombre => {
-      const key = `${servicio.chofer}_${clienteNombre}`;
-      delete envasesPorClienteRuta[key];
+  if (targetRutaId) {
+    await finalizarRuta(targetRutaId, {
+      km: km,
+      obs: obs,
+      detalleClientes: detalleClientes.length > 0 ? detalleClientes : undefined,
+      chofer: choferTarget || servicio?.chofer,
+      camion: servicio?.camion,
+      dia: servicio?.dia
     });
+  } else if (servicio) {
+    const fechaHoy = new Date().toISOString().split('T')[0];
+    const horaFin = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    const rutaFinalizadaHistorial = {
+      id: 'hist_' + Date.now() + '_' + Math.random().toString(36).substr(2, 6),
+      fecha: fechaHoy,
+      dia: servicio.dia || 'General',
+      chofer: servicio.chofer,
+      camion: servicio.camion,
+      rutaNombre: servicio.rutaNombre || 'Ruta Libre',
+      km: km,
+      obs: obs,
+      horaInicio: servicio.inicio || '08:00',
+      horaFin: horaFin,
+      detalleClientes: detalleClientes,
+      estado: 'completada'
+    };
+    historialFinalizadas.unshift(rutaFinalizadaHistorial);
+    if (typeof camiones !== 'undefined') {
+      const c = camiones.find(v => v.matricula === servicio.camion);
+      if (c) c.estado = 'Libre';
+    }
+    delete serviciosActivos[choferTarget];
+    if (choferAcordeonAbierto === choferTarget) choferAcordeonAbierto = null;
+    guardarDatosEnLocal();
+    if (typeof refrescarVistasRutas === 'function') refrescarVistasRutas();
+  } else {
+    alert('No se ha encontrado ninguna ruta para finalizar.');
+    return;
   }
-
-  delete serviciosActivos[choferTarget];
-  if (choferAcordeonAbierto === choferTarget) choferAcordeonAbierto = null;
 
   if (kmInput) kmInput.value = '';
   if (obsInput) obsInput.value = '';
-  
-  // Guardar permanente en localStorage
-  guardarDatosEnLocal();
+  const inputRutaId = document.getElementById('cierre-ruta-id');
+  if (inputRutaId) inputRutaId.value = '';
+
   toggleModalCierreFinal(false);
   renderModuloLogistica();
-  if (typeof renderHistorialChoferesGrid === 'function') renderHistorialChoferesGrid();
-  if (typeof verDetalleHistorialChofer === 'function' && window.choferSeleccionadoActual === servicio.chofer) {
-    verDetalleHistorialChofer(servicio.chofer);
+  if (typeof refrescarVistasRutas === 'function') {
+    refrescarVistasRutas();
   }
-  mostrarToastLogistica(`✓ Ruta Finalizada para ${servicio.chofer}. Guardada en su historial y retirada de disponibles.`);
+  mostrarToastLogistica(`✓ Ruta Finalizada para ${choferTarget || 'el conductor'}. Guardada en su historial y retirada de disponibles.`);
 };
 
 window.enviarAlertaUltimaHora = function() {
@@ -1569,7 +1470,10 @@ window.seleccionarCamionRepostaje = function(matricula) {
     spanTexto.classList.remove('text-slate-400', 'text-slate-500');
     spanTexto.classList.add('font-bold', 'text-blue-950');
   }
-  toggleDropdownCamiones();
+  const menu = document.getElementById('menu-dropdown-camion');
+  if (menu && !menu.classList.contains('hidden')) {
+    menu.classList.add('hidden');
+  }
 };
 
 /* --- CONTROL DESPLEGABLE PERSONALIZADO DE CONDUCTORES --- */
@@ -1591,7 +1495,10 @@ window.seleccionarChoferRepostaje = function(nombre) {
     spanTexto.classList.remove('text-slate-400', 'text-slate-500');
     spanTexto.classList.add('font-bold', 'text-indigo-950');
   }
-  toggleDropdownChoferes();
+  const menu = document.getElementById('menu-dropdown-chofer');
+  if (menu && !menu.classList.contains('hidden')) {
+    menu.classList.add('hidden');
+  }
 };
 
 document.addEventListener('click', function(e) {

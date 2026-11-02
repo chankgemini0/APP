@@ -774,12 +774,13 @@
     <div class="light-card rounded-2xl max-w-md w-full p-6 space-y-5 border border-purple-200 shadow-xl">
       <div class="flex justify-between items-center border-b border-slate-100 pb-3">
         <h3 class="text-lg font-bold text-slate-800 flex items-center gap-2">
-          <i class="fa-solid fa-flag-checkered text-purple-600"></i> Cierre de Ruta
+          <i class="fa-solid fa-flag-checkered text-purple-600"></i> <span id="cierre-modal-titulo">Cierre de Ruta</span>
         </h3>
         <button onclick="toggleModalCierreFinal(false)" class="text-slate-400 hover:text-slate-600 text-2xl cursor-pointer">&times;</button>
       </div>
       <form onsubmit="confirmarCierreRutaDefinitivo(event)" class="space-y-4">
         <input type="hidden" id="cierre-chofer-target" value="">
+        <input type="hidden" id="cierre-ruta-id" value="">
         <div>
           <label class="block text-xs font-bold text-slate-600 mb-1">Km Finales del Vehículo <span class="text-purple-600 font-normal">(Opcional)</span></label>
           <input type="number" id="cierre-km" placeholder="Ej: 145200" class="w-full bg-slate-50 border border-slate-300 rounded-xl p-3 text-sm text-slate-800 focus:border-purple-500 focus:outline-none">
@@ -855,7 +856,9 @@
 
         <div class="flex justify-end gap-3 pt-2">
           <button type="button" onclick="toggleModalRepostaje(false)" class="px-4 py-2 bg-slate-100 text-slate-600 text-sm rounded-xl font-bold hover:bg-slate-200 cursor-pointer">Cancelar</button>
-          <button type="submit" class="px-5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-sm rounded-xl font-bold cursor-pointer">Guardar Ticket</button>
+          <button type="submit" id="btn-guardar-ticket-repostaje" class="px-5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-sm rounded-xl font-bold cursor-pointer transition-all flex items-center gap-2">
+            <i class="fa-solid fa-floppy-disk"></i> Guardar Ticket
+          </button>
         </div>
       </form>
     </div>

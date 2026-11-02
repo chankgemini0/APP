@@ -34,6 +34,7 @@ window._supabase = _supabase;
 
 // Referencia al canal de Realtime para suscripciones
 let canalRealtimeRutas = null;
+let canalRealtimeRepostajes = null;
 
 /**
  * Extrae y normaliza de forma segura la columna "clientes" (jsonb o array) recibida desde Supabase.
@@ -163,6 +164,9 @@ async function cargarRutasDesdeSupabase() {
         rutas = rutasMapeadas;
         window.rutas = rutas;
         asegurarConductoresDesdeRutas();
+        if (typeof asegurarSincronizacionHistorial === 'function') {
+          asegurarSincronizacionHistorial();
+        }
         if (typeof guardarDatosEnLocal === 'function') guardarDatosEnLocal();
       } else {
         console.log('Tabla "rutas" en Supabase vacía. Migrando rutas locales iniciales a Supabase...');
@@ -323,6 +327,11 @@ async function actualizarEstadoRutaSupabase(id, nuevoEstado) {
   const rutaEnMemoria = rutas.find(r => String(r.id) === String(id));
   if (rutaEnMemoria) {
     rutaEnMemoria.estado = nuevoEstado;
+    if (nuevoEstado === 'completada' || nuevoEstado === 'finalizada') {
+      if (typeof registrarRutaEnHistorial === 'function') {
+        registrarRutaEnHistorial(rutaEnMemoria);
+      }
+    }
     if (typeof guardarDatosEnLocal === 'function') guardarDatosEnLocal();
     refrescarVistasRutas();
   }
@@ -448,22 +457,16 @@ async function actualizarClientesRutaSupabase(id, clientes) {
 
 /**
  * 4. DELETE: Eliminar una ruta de Supabase
- * Ejecuta la llamada asíncrona a Supabase antes de confirmar el borrado
+ * Ejecuta la llamada asíncrona a Supabase utilizando await _supabase.from('rutas').delete().eq('id', idDelRegistro)
+ * Valida que no devuelva error y solo confirma tras el borrado exitoso.
  */
-async function eliminarRutaSupabase(id) {
-  if (!id) {
+async function eliminarRutaSupabase(idDelRegistro) {
+  if (!idDelRegistro) {
     console.warn('⚠️ eliminarRutaSupabase llamado sin ID válido');
-    return { success: false, error: 'ID no especificado' };
+    return { success: false, error: new Error('ID no especificado') };
   }
 
-  console.log(`🗑️ Ejecutando llamada asíncrona de borrado en Supabase para ruta ID: ${id}...`);
-
-  // Limpiar metadatos locales asociados
-  const metaLocal = (typeof cargarStorage === 'function') ? cargarStorage('bugamed_rutas_meta', {}) : {};
-  if (metaLocal[id]) {
-    delete metaLocal[id];
-    try { localStorage.setItem('bugamed_rutas_meta', JSON.stringify(metaLocal)); } catch (e) {}
-  }
+  console.log(`🗑️ Ejecutando llamada asíncrona de borrado en Supabase para ruta ID: ${idDelRegistro}...`);
 
   // Si Supabase no está configurado, permitir eliminación local
   if (!_supabase) {
@@ -472,36 +475,73 @@ async function eliminarRutaSupabase(id) {
   }
 
   // Si es un id temporal previo a guardarse en Supabase
-  if (String(id).startsWith('temp_') || String(id).startsWith('ruta_init_')) {
+  if (typeof idDelRegistro === 'string' && (idDelRegistro.startsWith('temp_') || idDelRegistro.startsWith('ruta_init_'))) {
     return { success: true };
   }
 
   try {
-    const { data, error } = await _supabase
+    // 1. Llamada asíncrona real a Supabase
+    const { error } = await _supabase
       .from('rutas')
       .delete()
-      .eq('id', id)
-      .select();
+      .eq('id', idDelRegistro);
 
+    // 2. Validar que no devuelva error
     if (error) {
-      console.error(`❌ Error al eliminar ruta ${id} en Supabase:`, error.message);
+      console.error(`❌ Error al eliminar ruta ${idDelRegistro} en Supabase:`, error.message);
       if (typeof mostrarToastLogistica === 'function') {
         mostrarToastLogistica(`⚠️ Error en Supabase al eliminar: ${error.message}`);
       }
       return { success: false, error };
     }
 
-    if (data && data.length === 0) {
-      console.warn(`⚠️ Supabase reportó 0 filas eliminadas para ID: ${id}. Verifica las políticas RLS de DELETE en la tabla rutas.`);
-    } else {
-      console.log(`✓ Ruta ${id} eliminada exitosamente en Supabase:`, data);
+    // Limpiar metadatos locales asociados
+    const metaLocal = (typeof cargarStorage === 'function') ? cargarStorage('bugamed_rutas_meta', {}) : {};
+    if (metaLocal[idDelRegistro]) {
+      delete metaLocal[idDelRegistro];
+      try { localStorage.setItem('bugamed_rutas_meta', JSON.stringify(metaLocal)); } catch (e) {}
     }
 
-    return { success: true, data };
+    console.log(`✓ Ruta ${idDelRegistro} eliminada exitosamente en Supabase.`);
+    return { success: true };
   } catch (err) {
-    console.error(`❌ Excepción al eliminar ruta ${id} en Supabase:`, err);
+    console.error(`❌ Excepción al eliminar ruta ${idDelRegistro} en Supabase:`, err);
     return { success: false, error: err };
   }
+}
+
+/**
+ * Función global para eliminar una ruta por ID:
+ * 1. Ejecuta la llamada asíncrona a Supabase
+ * 2. Valida que no devuelva error
+ * 3. Solo elimina del array local y de la pantalla una vez confirmado el éxito
+ */
+async function eliminarRuta(idDelRegistro) {
+  if (!idDelRegistro) {
+    console.warn('⚠️ eliminarRuta llamado sin ID');
+    return false;
+  }
+
+  const res = await eliminarRutaSupabase(idDelRegistro);
+  if (res && res.success === false) {
+    alert(`⚠️ Error al eliminar en Supabase: ${res.error?.message || 'Error desconocido'}.\n\nEl registro se mantiene en pantalla.`);
+    return false;
+  }
+
+  // 3. Solo eliminar del array local y de la interfaz tras la confirmación exitosa de Supabase
+  const index = rutas.findIndex(r => String(r.id) === String(idDelRegistro));
+  if (index !== -1) {
+    rutas.splice(index, 1);
+  }
+  window.rutas = rutas;
+  if (typeof guardarDatosEnLocal === 'function') guardarDatosEnLocal();
+  if (typeof refrescarVistasRutas === 'function') refrescarVistasRutas();
+
+  if (typeof mostrarToastLogistica === 'function') {
+    mostrarToastLogistica('✓ Ruta eliminada de Supabase y de la pantalla');
+  }
+
+  return true;
 }
 
 /**
@@ -703,6 +743,13 @@ function procesarEventoRealtime(payload) {
       // Sincronizar estado de servicio en vivo si otro usuario inició o completó la ruta
       sincronizarServicioActivoDesdeRealtime(nuevoRegistro, rutas[index]);
 
+      // Si la ruta cambió su estado a completada o finalizada, registrarla en Historial
+      if (nuevoRegistro.estado === 'completada' || nuevoRegistro.estado === 'finalizada') {
+        if (typeof registrarRutaEnHistorial === 'function') {
+          registrarRutaEnHistorial(rutas[index]);
+        }
+      }
+
       // Asegurar que el conductor nuevo/actualizado exista en la lista local de choferes
       asegurarConductoresDesdeRutas();
 
@@ -727,6 +774,11 @@ function procesarEventoRealtime(payload) {
         rutaMapeada.clientes = clientesNuevos;
       }
       rutas.unshift(rutaMapeada);
+      if (nuevoRegistro.estado === 'completada' || nuevoRegistro.estado === 'finalizada') {
+        if (typeof registrarRutaEnHistorial === 'function') {
+          registrarRutaEnHistorial(rutaMapeada);
+        }
+      }
       asegurarConductoresDesdeRutas();
       window.rutas = rutas;
       if (typeof guardarDatosEnLocal === 'function') guardarDatosEnLocal();
@@ -736,8 +788,8 @@ function procesarEventoRealtime(payload) {
       console.log(`✓ Ruta incorporada tras UPDATE con conductor: "${rutaMapeada.conductor}" (${rutaMapeada.clientes.length} clientes)`);
     }
   } else if (eventType === 'DELETE') {
-    // Eliminar el registro del array local buscando por payload.old.id
-    const idEliminar = viejoRegistro?.id;
+    // Eliminar el registro del array local buscando por payload.old.id (o variantes del payload)
+    const idEliminar = viejoRegistro?.id ?? payload.old_record?.id ?? payload.id;
     console.log(`🗑️ Procesando evento Realtime DELETE para ID:`, idEliminar);
 
     if (idEliminar) {
@@ -884,6 +936,12 @@ function refrescarVistasRutas() {
 
   try {
     if (typeof renderHistorialChoferesGrid === 'function') renderHistorialChoferesGrid();
+    if (typeof verDetalleHistorialChofer === 'function' && window.choferSeleccionadoActual) {
+      const panelHistorial = document.getElementById('panel-detalle-historial-chofer');
+      if (panelHistorial && !panelHistorial.classList.contains('hidden')) {
+        verDetalleHistorialChofer(window.choferSeleccionadoActual);
+      }
+    }
     if (typeof actualizarKPIs === 'function') actualizarKPIs();
   } catch (e) {}
 }
@@ -916,6 +974,418 @@ function actualizarBadgeSupabase(estado, errorDetalle = '') {
   }
 }
 
+/* ==========================================================================
+   SINCRONIZACIÓN Y TIEMPO REAL DE LA TABLA "repostajes"
+   ========================================================================== */
+
+/**
+ * Normaliza un registro de repostaje proveniente de Supabase al formato que utiliza la aplicación en memoria.
+ */
+function mapearRepostajeDesdeSupabase(r) {
+  if (!r) return null;
+  const fechaStr = r.fecha || (r.created_at ? r.created_at.split('T')[0] : new Date().toISOString().split('T')[0]);
+  return {
+    id: r.id,
+    created_at: r.created_at || new Date().toISOString(),
+    fecha: fechaStr,
+    camion: r.camion || r.vehiculo || '',
+    chofer: (r.chofer || r.conductor || 'General').trim() || 'General',
+    litros: (r.litros !== undefined && r.litros !== null) ? String(r.litros) : '0',
+    euros: (r.euros !== undefined && r.euros !== null) ? String(r.euros) : '0',
+    km: (r.km !== undefined && r.km !== null) ? String(r.km) : '',
+    adblue: (r.adblue !== undefined && r.adblue !== null) ? String(r.adblue) : '',
+    tipo: r.tipo || 'Gasoil'
+  };
+}
+
+/**
+ * 1. SELECT: Obtener todos los repostajes desde Supabase al iniciar la aplicación
+ */
+async function cargarRepostajesDesdeSupabase() {
+  if (!_supabase) {
+    console.warn('⚠️ Supabase no disponible para cargar repostajes.');
+    return;
+  }
+
+  try {
+    const { data, error } = await _supabase
+      .from('repostajes')
+      .select('*')
+      .order('created_at', { ascending: false });
+
+    if (error) {
+      if (error.code === 'PGRST205' || (error.message && error.message.includes('schema cache'))) {
+        console.warn('ℹ️ La tabla "repostajes" aún no ha sido creada en el panel de Supabase. Operando con datos locales temporalmente.');
+        return;
+      }
+      console.error('Error al consultar repostajes en Supabase:', error.message);
+      return;
+    }
+
+    if (data && Array.isArray(data)) {
+      if (data.length > 0) {
+        console.log(`✓ ${data.length} repostajes cargados exitosamente desde Supabase:`, data);
+        const mapeados = data.map(mapearRepostajeDesdeSupabase).filter(Boolean);
+        repostajes = mapeados;
+        window.repostajes = repostajes;
+        if (typeof guardarDatosEnLocal === 'function') guardarDatosEnLocal();
+      } else {
+        console.log('Tabla "repostajes" en Supabase vacía. Migrando repostajes locales iniciales si existen...');
+        await migrarRepostajesInicialesASupabase();
+      }
+      refrescarVistasRepostajes();
+    }
+  } catch (err) {
+    console.error('Excepción al cargar repostajes desde Supabase:', err);
+  }
+}
+
+/**
+ * Migra los repostajes locales iniciales si la tabla remota en Supabase está vacía
+ */
+async function migrarRepostajesInicialesASupabase() {
+  if (!_supabase || typeof repostajes === 'undefined' || !Array.isArray(repostajes) || repostajes.length === 0) return;
+
+  try {
+    const filasParaInsertar = repostajes.map(r => ({
+      fecha: r.fecha || new Date().toISOString().split('T')[0],
+      camion: r.camion || '',
+      chofer: r.chofer || 'General',
+      litros: parseFloat(r.litros || 0) || 0,
+      euros: parseFloat(r.euros || 0) || 0,
+      km: r.km ? (parseFloat(r.km) || null) : null,
+      adblue: r.adblue ? (parseFloat(r.adblue) || null) : null,
+      tipo: r.tipo || 'Gasoil'
+    }));
+
+    const { data, error } = await _supabase
+      .from('repostajes')
+      .insert(filasParaInsertar)
+      .select();
+
+    if (!error && data && data.length > 0) {
+      console.log(`✓ ${data.length} repostajes iniciales migrados exitosamente a Supabase.`);
+      repostajes = data.map(mapearRepostajeDesdeSupabase).filter(Boolean);
+      window.repostajes = repostajes;
+      if (typeof guardarDatosEnLocal === 'function') guardarDatosEnLocal();
+    }
+  } catch (e) {
+    console.error('Error durante la migración de repostajes a Supabase:', e);
+  }
+}
+
+/**
+ * 2. INSERT: Registrar un nuevo repostaje en Supabase de forma asíncrona
+ */
+async function insertarRepostajeSupabase({ fecha, camion, chofer, litros, euros, km, adblue, tipo = 'Gasoil' }) {
+  const f = fecha || new Date().toISOString().split('T')[0];
+  const cam = (camion || '').trim();
+  const ch = (chofer || '').trim() || 'General';
+  const lit = String(litros || '0');
+  const eur = String(euros || '0');
+  const k = (km !== undefined && km !== null && km !== '') ? String(km) : '';
+  const adb = (adblue !== undefined && adblue !== null && adblue !== '') ? String(adblue) : '';
+  const tip = tipo || 'Gasoil';
+
+  // 1. Inserción optimista en memoria local para respuesta instantánea en la interfaz
+  const tempId = 'temp_rep_' + Date.now() + '_' + Math.random().toString(36).substr(2, 5);
+  const nuevoLocal = {
+    id: tempId,
+    fecha: f,
+    camion: cam,
+    chofer: ch,
+    litros: lit,
+    euros: eur,
+    km: k,
+    adblue: adb,
+    tipo: tip,
+    created_at: new Date().toISOString()
+  };
+
+  if (typeof repostajes !== 'undefined' && Array.isArray(repostajes)) {
+    repostajes.unshift(nuevoLocal);
+    window.repostajes = repostajes;
+  }
+  if (typeof guardarDatosEnLocal === 'function') guardarDatosEnLocal();
+  refrescarVistasRepostajes();
+
+  if (!_supabase) {
+    console.warn('⚠️ Supabase no disponible; el repostaje se guardó únicamente en local.');
+    return nuevoLocal;
+  }
+
+  try {
+    const payload = {
+      fecha: f,
+      camion: cam,
+      chofer: ch,
+      litros: parseFloat(lit) || 0,
+      euros: parseFloat(eur) || 0,
+      km: k ? (parseFloat(k) || null) : null,
+      adblue: adb ? (parseFloat(adb) || null) : null,
+      tipo: tip
+    };
+
+    console.log('🚀 Insertando repostaje asíncrono en Supabase:', payload);
+
+    let { data, error } = await _supabase
+      .from('repostajes')
+      .insert([payload])
+      .select();
+
+    // Si falló por alguna columna opcional inexistente en Postgres (código 42703), reintentar con campos base
+    if (error && (error.code === '42703' || (error.message && (error.message.includes('adblue') || error.message.includes('tipo') || error.message.includes('km'))))) {
+      console.warn('⚠️ Columnas opcionales no detectadas en tabla "repostajes". Reintentando con esquema mínimo...');
+      const payloadMin = {
+        fecha: f,
+        camion: cam,
+        chofer: ch,
+        litros: parseFloat(lit) || 0,
+        euros: parseFloat(eur) || 0
+      };
+      const retry = await _supabase.from('repostajes').insert([payloadMin]).select();
+      data = retry.data;
+      error = retry.error;
+    }
+
+    if (error) {
+      console.error('❌ Error al insertar repostaje en Supabase:', error.message);
+      if (typeof mostrarToastLogistica === 'function') {
+        if (error.code === 'PGRST205') {
+          mostrarToastLogistica('⚠️ Falta crear la tabla "repostajes" en Supabase. Guardado localmente.');
+        } else {
+          mostrarToastLogistica(`⚠️ Error en Supabase al registrar repostaje: ${error.message}`);
+        }
+      }
+      return nuevoLocal;
+    }
+
+    if (data && data[0]) {
+      const creado = data[0];
+      const mapeado = mapearRepostajeDesdeSupabase(creado);
+
+      // Reemplazar el registro optimista temporal con el ID definitivo asignado por Supabase
+      if (typeof repostajes !== 'undefined' && Array.isArray(repostajes)) {
+        const idx = repostajes.findIndex(r => r.id === tempId);
+        if (idx !== -1) {
+          repostajes[idx] = mapeado;
+        }
+        window.repostajes = repostajes;
+      }
+
+      if (typeof guardarDatosEnLocal === 'function') guardarDatosEnLocal();
+      refrescarVistasRepostajes();
+      console.log('✓ Repostaje confirmado e insertado en Supabase con ID:', creado.id);
+      return mapeado;
+    }
+  } catch (err) {
+    console.error('Excepción al insertar repostaje en Supabase:', err);
+  }
+
+  return nuevoLocal;
+}
+
+/**
+ * 3. DELETE: Eliminar un registro de repostaje de Supabase
+ */
+async function eliminarRepostajeSupabase(idDelRegistro) {
+  if (!idDelRegistro) {
+    return { success: false, error: new Error('ID no especificado') };
+  }
+
+  if (String(idDelRegistro).startsWith('temp_rep_')) {
+    return { success: true };
+  }
+
+  if (!_supabase) {
+    return { success: true };
+  }
+
+  try {
+    console.log(`🗑️ Eliminando repostaje ID ${idDelRegistro} en Supabase...`);
+    const { error } = await _supabase
+      .from('repostajes')
+      .delete()
+      .eq('id', idDelRegistro);
+
+    if (error) {
+      console.error(`❌ Error al eliminar repostaje ${idDelRegistro} en Supabase:`, error.message);
+      return { success: false, error };
+    }
+
+    console.log(`✓ Repostaje ${idDelRegistro} eliminado exitosamente en Supabase.`);
+    return { success: true };
+  } catch (err) {
+    console.error(`❌ Excepción al eliminar repostaje ${idDelRegistro} en Supabase:`, err);
+    return { success: false, error: err };
+  }
+}
+
+/**
+ * 4. REALTIME: Suscribirse a cambios en tiempo real en la tabla "repostajes"
+ * Escucha todos los eventos utilizando { event: '*', schema: 'public', table: 'repostajes' }
+ */
+function suscribirRepostajesRealtime() {
+  if (!_supabase) {
+    console.warn('⚠️ Cliente Supabase no disponible para Realtime de repostajes.');
+    return;
+  }
+
+  if (canalRealtimeRepostajes) {
+    console.log('🔄 Removiendo canal Realtime de repostajes previo antes de reconectar...');
+    try {
+      _supabase.removeChannel(canalRealtimeRepostajes);
+    } catch (e) {
+      console.warn('Error al remover canal Realtime anterior de repostajes:', e);
+    }
+    canalRealtimeRepostajes = null;
+  }
+
+  console.log('📡 Conectando canal Realtime "bugamed-repostajes-realtime" para tabla "repostajes" con { event: "*" }...');
+
+  canalRealtimeRepostajes = _supabase
+    .channel('bugamed-repostajes-realtime')
+    .on(
+      'postgres_changes',
+      { event: '*', schema: 'public', table: 'repostajes' },
+      (payload) => {
+        console.log(`⛽ [Realtime Repostajes] Evento recibido: [${payload.eventType}]`, payload);
+        procesarEventoRealtimeRepostajes(payload);
+      }
+    )
+    .subscribe((status, err) => {
+      console.log('📡 Estado de conexión Realtime Repostajes:', status);
+      if (err) {
+        console.error('❌ Error en canal Realtime Repostajes:', err);
+      }
+    });
+}
+
+/**
+ * Procesa los eventos entrantes de Supabase Realtime para la tabla "repostajes" (INSERT, UPDATE, DELETE).
+ * Actualiza el array local de repostajes y vuelve a dibujar la interfaz en todos los dispositivos conectados.
+ */
+function procesarEventoRealtimeRepostajes(payload) {
+  if (!payload) return;
+
+  const eventType = (payload.eventType || payload.type || '').toUpperCase();
+  const nuevoRegistro = payload.new;
+  const viejoRegistro = payload.old;
+
+  console.log(`⚡ Procesando evento Realtime [${eventType}] en tabla "repostajes":`, {
+    nuevo: nuevoRegistro,
+    viejo: viejoRegistro
+  });
+
+  if (typeof repostajes === 'undefined' || !Array.isArray(repostajes)) {
+    window.repostajes = window.repostajes || [];
+    repostajes = window.repostajes;
+  }
+
+  if (eventType === 'INSERT') {
+    if (!nuevoRegistro || !nuevoRegistro.id) return;
+
+    const mapeado = mapearRepostajeDesdeSupabase(nuevoRegistro);
+    const nuevoId = String(nuevoRegistro.id);
+
+    // 1. Comprobar si reemplaza un registro optimista local pendiente
+    const tempIndex = repostajes.findIndex(r => 
+      String(r.id).startsWith('temp_rep_') &&
+      r.camion === mapeado.camion &&
+      r.chofer === mapeado.chofer &&
+      Math.abs(parseFloat(r.litros || 0) - parseFloat(mapeado.litros || 0)) < 0.01
+    );
+
+    // 2. Comprobar si ya existe por ID
+    const indexExistente = repostajes.findIndex(r => String(r.id) === nuevoId);
+
+    if (tempIndex !== -1) {
+      repostajes[tempIndex] = mapeado;
+      console.log(`✓ Repostaje temporal local confirmado con ID Supabase: ${nuevoId}`);
+    } else if (indexExistente !== -1) {
+      repostajes[indexExistente] = mapeado;
+      console.log(`✓ Repostaje existente ${nuevoId} actualizado tras INSERT`);
+    } else {
+      repostajes.unshift(mapeado);
+      console.log(`✓ Nuevo repostaje recibido en tiempo real: ${mapeado.camion} (${mapeado.litros}L) por ${mapeado.chofer}`);
+      if (typeof mostrarToastLogistica === 'function') {
+        mostrarToastLogistica(`⛽ Nuevo repostaje: ${mapeado.camion} - ${mapeado.litros}L (${mapeado.chofer})`);
+      }
+    }
+
+    window.repostajes = repostajes;
+    if (typeof guardarDatosEnLocal === 'function') guardarDatosEnLocal();
+    refrescarVistasRepostajes();
+
+  } else if (eventType === 'UPDATE') {
+    if (!nuevoRegistro || !nuevoRegistro.id) return;
+    const nuevoId = String(nuevoRegistro.id);
+    const index = repostajes.findIndex(r => String(r.id) === nuevoId);
+    const mapeado = mapearRepostajeDesdeSupabase(nuevoRegistro);
+
+    if (index !== -1) {
+      repostajes[index] = mapeado;
+      console.log(`✓ Repostaje ${nuevoId} actualizado en tiempo real.`);
+    } else {
+      repostajes.unshift(mapeado);
+    }
+
+    window.repostajes = repostajes;
+    if (typeof guardarDatosEnLocal === 'function') guardarDatosEnLocal();
+    refrescarVistasRepostajes();
+
+  } else if (eventType === 'DELETE') {
+    const idEliminar = viejoRegistro?.id ?? payload.old_record?.id ?? payload.id;
+    console.log(`🗑️ Evento DELETE Realtime en repostajes para ID:`, idEliminar);
+
+    if (idEliminar) {
+      const antes = repostajes.length;
+      repostajes = repostajes.filter(r => String(r.id) !== String(idEliminar));
+      if (repostajes.length !== antes) {
+        console.log(`✓ Repostaje ${idEliminar} eliminado localmente tras evento DELETE de Supabase.`);
+      }
+      window.repostajes = repostajes;
+      if (typeof guardarDatosEnLocal === 'function') guardarDatosEnLocal();
+      refrescarVistasRepostajes();
+      if (typeof mostrarToastLogistica === 'function') {
+        mostrarToastLogistica('⚡ Un registro de repostaje fue eliminado.');
+      }
+    }
+  }
+}
+
+/**
+ * Re-renderiza dinámicamente todas las vistas de repostajes en la interfaz (panel admin, lista y detalle de chofer)
+ */
+function refrescarVistasRepostajes() {
+  try {
+    if (typeof renderAdminCombustible === 'function') {
+      renderAdminCombustible();
+    }
+  } catch (e) {
+    console.warn('Aviso al refrescar renderAdminCombustible:', e);
+  }
+
+  try {
+    if (typeof renderRepostajes === 'function') {
+      renderRepostajes();
+    }
+  } catch (e) {
+    console.warn('Aviso al refrescar renderRepostajes:', e);
+  }
+
+  try {
+    if (typeof verDetalleHistorialChofer === 'function' && window.choferSeleccionadoActual) {
+      const panelHistorial = document.getElementById('panel-detalle-historial-chofer');
+      if (panelHistorial && !panelHistorial.classList.contains('hidden')) {
+        verDetalleHistorialChofer(window.choferSeleccionadoActual);
+      }
+    }
+  } catch (e) {
+    console.warn('Aviso al refrescar historial de repostajes del chofer:', e);
+  }
+}
+
 /**
  * Función principal de arranque de Supabase llamada al cargar la página
  */
@@ -925,11 +1395,15 @@ async function iniciarSupabaseApp() {
     return;
   }
 
-  // 1. Cargar las rutas remotas desde Supabase (SELECT)
-  await cargarRutasDesdeSupabase();
+  // 1. Cargar las rutas y repostajes remotos desde Supabase (SELECT)
+  await Promise.allSettled([
+    cargarRutasDesdeSupabase(),
+    cargarRepostajesDesdeSupabase()
+  ]);
 
-  // 2. Suscribirse a cambios en tiempo real (REALTIME)
+  // 2. Suscribirse a cambios en tiempo real en ambas tablas (REALTIME)
   suscribirRutasRealtime();
+  suscribirRepostajesRealtime();
 }
 
 // Exponer funciones principales en window para acceso global
@@ -941,9 +1415,19 @@ window.actualizarConductorRutaSupabase = actualizarConductorRutaSupabase;
 window.actualizarRutaSupabase = actualizarRutaSupabase;
 window.actualizarClientesRutaSupabase = actualizarClientesRutaSupabase;
 window.eliminarRutaSupabase = eliminarRutaSupabase;
+window.eliminarRuta = eliminarRuta;
 window.suscribirRutasRealtime = suscribirRutasRealtime;
 window.iniciarSupabaseApp = iniciarSupabaseApp;
 window.refrescarVistasRutas = refrescarVistasRutas;
 window.asegurarConductoresDesdeRutas = asegurarConductoresDesdeRutas;
 window.actualizarBadgeSupabase = actualizarBadgeSupabase;
+
+// Exponer funciones de Repostajes en window
+window.mapearRepostajeDesdeSupabase = mapearRepostajeDesdeSupabase;
+window.cargarRepostajesDesdeSupabase = cargarRepostajesDesdeSupabase;
+window.insertarRepostajeSupabase = insertarRepostajeSupabase;
+window.eliminarRepostajeSupabase = eliminarRepostajeSupabase;
+window.suscribirRepostajesRealtime = suscribirRepostajesRealtime;
+window.procesarEventoRealtimeRepostajes = procesarEventoRealtimeRepostajes;
+window.refrescarVistasRepostajes = refrescarVistasRepostajes;
 

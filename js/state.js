@@ -94,6 +94,7 @@ let repostajes = cargarStorage('bugamed_repostajes', [
   { fecha: '2026-10-24', tipo: 'Gasoil', litros: '65', euros: '102.50', camion: '8912-MBN', chofer: 'Antonio Fernández' },
   { fecha: '2026-10-25', tipo: 'Gasoil', litros: '40', euros: '64.00', camion: '4589-KLL', chofer: 'David Morales' }
 ]);
+window.repostajes = repostajes;
 
 let incidencias = cargarStorage('bugamed_incidencias', [
   { fecha: '2026-10-22', categoria: 'Neumáticos', camion: '4589-KLL', nota: 'Presión baja en rueda trasera derecha.', resuelto: false }
@@ -265,6 +266,7 @@ const diasSemana = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sába
 
 function guardarDatosEnLocal() {
   window.rutas = rutas;
+  window.repostajes = repostajes;
   localStorage.setItem('bugamed_camiones', JSON.stringify(camiones));
   localStorage.setItem('bugamed_choferes', JSON.stringify(choferes));
   localStorage.setItem('bugamed_clientes', JSON.stringify(clientes));
@@ -276,6 +278,166 @@ function guardarDatosEnLocal() {
   localStorage.setItem('bugamed_historial_finalizadas', JSON.stringify(historialFinalizadas));
   actualizarKPIs();
 }
+
+function registrarRutaEnHistorial(ruta, metadatos = {}) {
+  if (!ruta) return null;
+  if (!Array.isArray(historialFinalizadas)) {
+    historialFinalizadas = [];
+  }
+
+  const idRuta = String(ruta.id || ('hist_' + Date.now() + '_' + Math.random().toString(36).substr(2, 6)));
+  const fechaHoy = metadatos.fecha || ruta.fechaCompletada || new Date().toISOString().split('T')[0];
+  const horaFin = metadatos.horaFin || ruta.horaFin || new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  const horaInicio = metadatos.horaInicio || ruta.horaInicio || '08:00';
+  const km = metadatos.km || ruta.km || 'No especificado';
+  const obs = metadatos.obs || ruta.obs || 'Ruta finalizada';
+  const chofer = ruta.chofer || ruta.conductor || metadatos.chofer || 'Sin conductor';
+  const camion = ruta.camion || ruta.vehiculo || metadatos.camion || 'Sin camión';
+  const dia = ruta.dia || metadatos.dia || 'General';
+
+  let detalleClientes = [];
+  if (metadatos.detalleClientes && Array.isArray(metadatos.detalleClientes) && metadatos.detalleClientes.length > 0) {
+    detalleClientes = metadatos.detalleClientes;
+  } else if (ruta.detalleClientes && Array.isArray(ruta.detalleClientes) && ruta.detalleClientes.length > 0) {
+    detalleClientes = ruta.detalleClientes;
+  } else if (ruta.clientes && Array.isArray(ruta.clientes)) {
+    detalleClientes = ruta.clientes.map(cli => {
+      const cliNombre = typeof cli === 'object' && cli !== null ? (cli.nombre || cli.name || '') : String(cli);
+      return { cliente: cliNombre, entregados: 0, recogidos: 0 };
+    });
+  }
+
+  const rutaNombre = ruta.rutaNombre || metadatos.rutaNombre || `Ruta ${dia} (${detalleClientes.length} paradas)`;
+
+  const idxExistente = historialFinalizadas.findIndex(h => String(h.id) === idRuta);
+  const entrada = {
+    id: idRuta,
+    fecha: fechaHoy,
+    dia: dia,
+    chofer: chofer,
+    camion: camion,
+    rutaNombre: rutaNombre,
+    km: km,
+    obs: obs,
+    horaInicio: horaInicio,
+    horaFin: horaFin,
+    detalleClientes: detalleClientes,
+    estado: 'completada'
+  };
+
+  if (idxExistente !== -1) {
+    historialFinalizadas[idxExistente] = { ...historialFinalizadas[idxExistente], ...entrada };
+  } else {
+    historialFinalizadas.unshift(entrada);
+  }
+
+  // Marcar estado en el objeto ruta
+  ruta.estado = 'finalizada';
+  ruta.fechaCompletada = fechaHoy;
+  ruta.horaInicio = horaInicio;
+  ruta.horaFin = horaFin;
+  ruta.km = km;
+  ruta.obs = obs;
+  ruta.detalleClientes = detalleClientes;
+
+  window.historialFinalizadas = historialFinalizadas;
+  return entrada;
+}
+
+function asegurarSincronizacionHistorial() {
+  if (!Array.isArray(rutas) || !Array.isArray(historialFinalizadas)) return;
+  let modificado = false;
+  rutas.forEach(r => {
+    if (r.estado === 'completada' || r.estado === 'finalizada') {
+      const existe = historialFinalizadas.some(h => String(h.id) === String(r.id));
+      if (!existe) {
+        registrarRutaEnHistorial(r);
+        modificado = true;
+      }
+    }
+  });
+  if (modificado) {
+    localStorage.setItem('bugamed_historial_finalizadas', JSON.stringify(historialFinalizadas));
+  }
+}
+asegurarSincronizacionHistorial();
+
+async function finalizarRuta(rutaId, metadatos = {}) {
+  if (!rutaId) return null;
+
+  let ruta = (typeof rutas !== 'undefined' && Array.isArray(rutas))
+    ? rutas.find(r => String(r.id) === String(rutaId))
+    : null;
+
+  if (!ruta) {
+    console.warn(`⚠️ No se encontró la ruta con ID ${rutaId} para finalizar.`);
+    return null;
+  }
+
+  const choferNombre = ruta.chofer || ruta.conductor;
+  const camionMat = ruta.camion || ruta.vehiculo;
+
+  // 1. Registrar en Historial y marcar como finalizada
+  const entradaHistorial = registrarRutaEnHistorial(ruta, metadatos);
+
+  // 2. Liberar el camión si corresponde
+  if (typeof camiones !== 'undefined' && Array.isArray(camiones) && camionMat) {
+    const v = camiones.find(c => c.matricula === camionMat);
+    if (v) v.estado = 'Libre';
+  }
+
+  // 3. Liberar servicio activo si estaba en curso
+  if (typeof serviciosActivos !== 'undefined' && choferNombre && serviciosActivos[choferNombre]) {
+    delete serviciosActivos[choferNombre];
+  }
+  if (typeof choferAcordeonAbierto !== 'undefined' && choferAcordeonAbierto === choferNombre) {
+    choferAcordeonAbierto = null;
+  }
+
+  // 4. Limpiar envases temporales de la ruta activa
+  if (typeof envasesPorClienteRuta !== 'undefined' && ruta.clientes) {
+    ruta.clientes.forEach(cli => {
+      const cNombre = typeof cli === 'object' && cli !== null ? (cli.nombre || cli.name || '') : String(cli);
+      const key = `${choferNombre}_${cNombre}`;
+      delete envasesPorClienteRuta[key];
+    });
+  }
+
+  // 5. Guardar en almacenamiento local persistente
+  if (typeof guardarDatosEnLocal === 'function') {
+    guardarDatosEnLocal();
+  }
+
+  // 6. Sincronizar actualización con Supabase en tiempo real
+  if (typeof actualizarEstadoRutaSupabase === 'function' && ruta.id) {
+    try {
+      await actualizarEstadoRutaSupabase(ruta.id, 'finalizada');
+    } catch (e) {
+      console.warn('Aviso sincronizando estado con Supabase:', e);
+    }
+  }
+
+  // 7. Re-renderizado dinámico de la interfaz completa
+  if (typeof refrescarVistasRutas === 'function') {
+    refrescarVistasRutas();
+  } else {
+    if (typeof renderDiasSemana === 'function') renderDiasSemana();
+    if (typeof renderGridChoferesAsignacion === 'function') renderGridChoferesAsignacion();
+    if (typeof renderHistorialChoferesGrid === 'function') renderHistorialChoferesGrid();
+  }
+
+  // 8. Si el detalle del historial de este chofer está abierto, actualizarlo
+  if (typeof verDetalleHistorialChofer === 'function' && window.choferSeleccionadoActual === choferNombre) {
+    verDetalleHistorialChofer(choferNombre);
+  }
+
+  return entradaHistorial;
+}
+
+window.registrarRutaEnHistorial = registrarRutaEnHistorial;
+window.asegurarSincronizacionHistorial = asegurarSincronizacionHistorial;
+window.finalizarRuta = finalizarRuta;
+window.historialFinalizadas = historialFinalizadas;
 
 function actualizarKPIs() {
   const elCam = document.getElementById('kpi-camiones');

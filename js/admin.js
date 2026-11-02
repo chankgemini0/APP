@@ -3,77 +3,148 @@ window.toggleModalRepostaje = function(show) {
   const m = document.getElementById('modal-repostaje');
   if (m) {
     if (show) {
-      const selRepCamion = document.getElementById('rep-camion');
-      if (selRepCamion && selRepCamion.tagName === 'SELECT' && (!selRepCamion.children || selRepCamion.children.length === 0) && typeof camiones !== 'undefined') {
-        selRepCamion.innerHTML = camiones.map(c => `<option value="${c.matricula}">${c.matricula}</option>`).join('');
+      // 1. Asegurar que las opciones de conductores y camiones estén pobladas en los menús
+      const listaOpcionesCamiones = document.getElementById('lista-opciones-camiones');
+      const listaOpcionesChoferes = document.getElementById('lista-opciones-choferes');
+      if (((listaOpcionesCamiones && (!listaOpcionesCamiones.children || listaOpcionesCamiones.children.length === 0)) ||
+           (listaOpcionesChoferes && (!listaOpcionesChoferes.children || listaOpcionesChoferes.children.length === 0))) && typeof renderModuloLogistica === 'function') {
+        renderModuloLogistica();
       }
+
+      // 2. Preselección inteligente: si ya hay un conductor o camión activo en pantalla, preseleccionarlo
+      const inputFichajeChofer = document.getElementById('fichaje-chofer-input');
+      const inputFichajeCamion = document.getElementById('fichaje-camion-input');
+      const inputRepChofer = document.getElementById('rep-chofer');
+      const inputRepCamion = document.getElementById('rep-camion');
+
+      if (inputFichajeChofer && inputFichajeChofer.value && (!inputRepChofer || !inputRepChofer.value) && typeof seleccionarChoferRepostaje === 'function') {
+        seleccionarChoferRepostaje(inputFichajeChofer.value);
+      }
+      if (inputFichajeCamion && inputFichajeCamion.value && (!inputRepCamion || !inputRepCamion.value) && typeof seleccionarCamionRepostaje === 'function') {
+        seleccionarCamionRepostaje(inputFichajeCamion.value);
+      }
+    } else {
+      const menuCam = document.getElementById('menu-dropdown-camion');
+      if (menuCam) menuCam.classList.add('hidden');
+      const menuChofer = document.getElementById('menu-dropdown-chofer');
+      if (menuChofer) menuChofer.classList.add('hidden');
     }
     m.classList.toggle('hidden', !show); 
   }
 };
 
-window.guardarRepostaje = function(e) {
+window.guardarRepostaje = async function(e) {
   if (e) e.preventDefault();
+
   const inputChofer = document.getElementById('rep-chofer');
   const chofer = (inputChofer && inputChofer.value && inputChofer.value.trim()) ? inputChofer.value.trim() : 'General';
-  const camion = document.getElementById('rep-camion')?.value || '';
+  const camion = document.getElementById('rep-camion')?.value?.trim() || '';
+  const litros = document.getElementById('rep-litros')?.value?.trim() || '';
+  const euros = document.getElementById('rep-euros')?.value?.trim() || '';
+  const km = document.getElementById('rep-km')?.value?.trim() || '';
+  const adblue = document.getElementById('rep-adblue')?.value?.trim() || '';
 
   if (!camion) {
     alert('Por favor, selecciona una matrícula de vehículo.');
     return;
   }
-
-  repostajes.unshift({
-    fecha: new Date().toISOString().split('T')[0],
-    camion: camion,
-    litros: document.getElementById('rep-litros')?.value || '',
-    euros: document.getElementById('rep-euros')?.value || '',
-    km: document.getElementById('rep-km')?.value || '',
-    adblue: document.getElementById('rep-adblue')?.value || '',
-    chofer: chofer
-  });
-  guardarDatosEnLocal();
-  toggleModalRepostaje(false);
-  if (e && e.target && typeof e.target.reset === 'function') {
-    e.target.reset();
-  } else {
-    const form = document.querySelector('#modal-repostaje form');
-    if (form) form.reset();
+  if (!litros || parseFloat(litros) <= 0) {
+    alert('Por favor, introduce los litros (L) repostados.');
+    return;
   }
-  const inputCamion = document.getElementById('rep-camion');
-  if (inputCamion) inputCamion.value = '';
-  const textRepCamion = document.getElementById('text-rep-camion');
-  if (textRepCamion) {
-    textRepCamion.textContent = 'Seleccionar vehículo...';
-    textRepCamion.classList.remove('font-bold', 'text-blue-950');
-    textRepCamion.classList.add('text-slate-500');
+  if (!euros || parseFloat(euros) <= 0) {
+    alert('Por favor, introduce el importe (€) del repostaje.');
+    return;
   }
-  const menuCam = document.getElementById('menu-dropdown-camion');
-  if (menuCam) menuCam.classList.add('hidden');
 
-  const inputChoferElem = document.getElementById('rep-chofer');
-  if (inputChoferElem) inputChoferElem.value = '';
-  const textRepChofer = document.getElementById('text-rep-chofer');
-  if (textRepChofer) {
-    textRepChofer.textContent = 'Seleccionar conductor...';
-    textRepChofer.classList.remove('font-bold', 'text-indigo-950');
-    textRepChofer.classList.add('text-slate-500');
+  // Deshabilitar temporalmente el botón de envío para evitar pulsaciones dobles
+  const btnSubmit = document.querySelector('#modal-repostaje button[type="submit"]');
+  const textoOriginal = btnSubmit ? btnSubmit.innerHTML : 'Guardar Ticket';
+  if (btnSubmit) {
+    btnSubmit.disabled = true;
+    btnSubmit.innerHTML = '<i class="fa-solid fa-spinner animate-spin"></i> Guardando...';
   }
-  const menuChofer = document.getElementById('menu-dropdown-chofer');
-  if (menuChofer) menuChofer.classList.add('hidden');
 
-  renderRepostajes();
-  renderAdminCombustible();
+  try {
+    const datosRepostaje = {
+      fecha: new Date().toISOString().split('T')[0],
+      camion: camion,
+      chofer: chofer,
+      litros: litros,
+      euros: euros,
+      km: km,
+      adblue: adblue,
+      tipo: 'Gasoil'
+    };
+
+    console.log('⛽ Iniciando inserción asíncrona de repostaje...', datosRepostaje);
+
+    // 1. Inserción asíncrona hacia Supabase con sincronización y Realtime
+    if (typeof insertarRepostajeSupabase === 'function') {
+      await insertarRepostajeSupabase(datosRepostaje);
+    } else {
+      repostajes.unshift({ ...datosRepostaje, id: 'local_' + Date.now() });
+      window.repostajes = repostajes;
+      if (typeof guardarDatosEnLocal === 'function') guardarDatosEnLocal();
+      if (typeof refrescarVistasRepostajes === 'function') refrescarVistasRepostajes();
+    }
+
+    // 2. Cerrar modal y limpiar campos
+    toggleModalRepostaje(false);
+
+    if (e && e.target && typeof e.target.reset === 'function') {
+      e.target.reset();
+    } else {
+      const form = document.querySelector('#modal-repostaje form');
+      if (form) form.reset();
+    }
+
+    // 3. Resetear selectores visuales de camión y conductor
+    const inputCamionElem = document.getElementById('rep-camion');
+    if (inputCamionElem) inputCamionElem.value = '';
+    const textRepCamion = document.getElementById('text-rep-camion');
+    if (textRepCamion) {
+      textRepCamion.textContent = 'Seleccionar vehículo...';
+      textRepCamion.classList.remove('font-bold', 'text-blue-950');
+      textRepCamion.classList.add('text-slate-500');
+    }
+    const menuCam = document.getElementById('menu-dropdown-camion');
+    if (menuCam) menuCam.classList.add('hidden');
+
+    const inputChoferElem = document.getElementById('rep-chofer');
+    if (inputChoferElem) inputChoferElem.value = '';
+    const textRepChofer = document.getElementById('text-rep-chofer');
+    if (textRepChofer) {
+      textRepChofer.textContent = 'Seleccionar conductor...';
+      textRepChofer.classList.remove('font-bold', 'text-indigo-950');
+      textRepChofer.classList.add('text-slate-500');
+    }
+    const menuChofer = document.getElementById('menu-dropdown-chofer');
+    if (menuChofer) menuChofer.classList.add('hidden');
+
+    if (typeof mostrarToastLogistica === 'function') {
+      mostrarToastLogistica(`✓ Repostaje de ${camion} registrado exitosamente`);
+    }
+  } catch (err) {
+    console.error('Error al guardar repostaje:', err);
+    alert('Error al guardar repostaje: ' + (err.message || 'Error desconocido'));
+  } finally {
+    if (btnSubmit) {
+      btnSubmit.disabled = false;
+      btnSubmit.innerHTML = textoOriginal;
+    }
+  }
 };
 
 function renderRepostajes() {
   const container = document.getElementById('lista-repostajes');
   if (!container) return;
-  if (repostajes.length === 0) {
+  const lista = (typeof repostajes !== 'undefined' && Array.isArray(repostajes)) ? repostajes : [];
+  if (lista.length === 0) {
     container.innerHTML = '<p class="text-xs text-slate-500 italic">Sin repostajes.</p>';
     return;
   }
-  container.innerHTML = repostajes.map((r, index) => `
+  container.innerHTML = lista.map((r, index) => `
     <div class="bg-slate-50 p-3 rounded-xl border border-slate-200 flex justify-between items-center text-xs">
       <div>
         <p class="font-bold text-slate-800"><i class="fa-solid fa-gas-pump text-indigo-600"></i> ${r.tipo ? `${r.tipo} - ` : ''}${r.camion}</p>
@@ -81,18 +152,61 @@ function renderRepostajes() {
       </div>
       <div class="flex items-center gap-3">
         <span class="font-bold text-indigo-700 text-sm">${r.euros} €</span>
-        <button onclick="eliminarRepostajeAdmin(${index})" class="text-slate-400 hover:text-red-500 p-1 cursor-pointer" title="Eliminar suministro por error"><i class="fa-solid fa-trash-can"></i></button>
+        <button onclick="eliminarRepostajeAdmin('${r.id || index}')" class="text-slate-400 hover:text-red-500 p-1 cursor-pointer" title="Eliminar suministro por error"><i class="fa-solid fa-trash-can"></i></button>
       </div>
     </div>
   `).join('');
 }
 
-window.eliminarRepostajeAdmin = function(index) {
-  if (confirm('¿Estás seguro de eliminar este registro de suministro de combustible añadido por error?')) {
-    repostajes.splice(index, 1);
-    guardarDatosEnLocal();
+window.eliminarRepostajeAdmin = async function(indexOrId) {
+  if (!confirm('¿Estás seguro de eliminar este registro de suministro de combustible añadido por error?')) {
+    return;
+  }
+
+  let indexReal = -1;
+  let idParaEliminar = null;
+
+  if (typeof indexOrId === 'number' || (!isNaN(parseInt(indexOrId)) && String(parseInt(indexOrId)) === String(indexOrId) && typeof repostajes !== 'undefined' && repostajes[indexOrId])) {
+    indexReal = parseInt(indexOrId, 10);
+    idParaEliminar = repostajes[indexReal]?.id;
+  } else {
+    idParaEliminar = indexOrId;
+    if (typeof repostajes !== 'undefined' && Array.isArray(repostajes)) {
+      indexReal = repostajes.findIndex(r => String(r.id) === String(indexOrId));
+    }
+  }
+
+  // 1. Si está sincronizado con Supabase y tiene ID real, llamar a eliminar asíncronamente
+  if (idParaEliminar && !String(idParaEliminar).startsWith('temp_rep_') && !String(idParaEliminar).startsWith('local_')) {
+    if (typeof eliminarRepostajeSupabase === 'function') {
+      const res = await eliminarRepostajeSupabase(idParaEliminar);
+      if (res && res.success === false) {
+        alert(`⚠️ Error al eliminar en Supabase: ${res.error?.message || 'Error desconocido'}.\n\nEl registro se mantiene en pantalla.`);
+        return;
+      }
+    }
+  }
+
+  // 2. Eliminar del array local en memoria
+  if (typeof repostajes !== 'undefined' && Array.isArray(repostajes)) {
+    if (indexReal !== -1) {
+      repostajes.splice(indexReal, 1);
+    } else if (idParaEliminar) {
+      repostajes = repostajes.filter(r => String(r.id) !== String(idParaEliminar));
+    }
+    window.repostajes = repostajes;
+  }
+
+  if (typeof guardarDatosEnLocal === 'function') guardarDatosEnLocal();
+  if (typeof refrescarVistasRepostajes === 'function') {
+    refrescarVistasRepostajes();
+  } else {
     renderRepostajes();
     renderAdminCombustible();
+  }
+
+  if (typeof mostrarToastLogistica === 'function') {
+    mostrarToastLogistica('✓ Registro de repostaje eliminado');
   }
 };
 
@@ -300,7 +414,7 @@ function renderAdminCombustible() {
                     <p class="font-extrabold text-emerald-700 text-sm sm:text-base">${parseFloat(r.euros || 0).toFixed(2)} €</p>
                     <p class="text-xs font-bold text-indigo-700">${parseFloat(r.litros || 0).toFixed(2)} L</p>
                   </div>
-                  <button onclick="eliminarRepostajeAdmin(${r.originalIndex})" class="text-slate-300 hover:text-red-500 p-1.5 rounded-lg hover:bg-red-50 transition-colors cursor-pointer" title="Eliminar ticket añadido por error">
+                  <button onclick="eliminarRepostajeAdmin('${r.id || r.originalIndex}')" class="text-slate-300 hover:text-red-500 p-1.5 rounded-lg hover:bg-red-50 transition-colors cursor-pointer" title="Eliminar ticket añadido por error">
                     <i class="fa-solid fa-trash-can text-xs"></i>
                   </button>
                 </div>
@@ -1020,11 +1134,80 @@ window.manejarSubidaImagenChofer = function(event) {
   reader.readAsDataURL(file);
 };
 
-window.eliminarChofer = function(index) {
-  if (confirm('¿Estás seguro de que deseas eliminar este conductor?')) {
-    choferes.splice(index, 1);
-    guardarDatosEnLocal();
-    renderChoferes();
+window.eliminarChofer = async function(index) {
+  if (typeof choferes === 'undefined' || !choferes[index]) return;
+  const ch = choferes[index];
+  const nombreChofer = ch.nombre;
+
+  if (!confirm(`¿Estás seguro de que deseas eliminar al conductor "${nombreChofer}"?`)) {
+    return;
+  }
+
+  // 1. Identificar todas las rutas asignadas a este conductor
+  const rutasDelChofer = (typeof rutas !== 'undefined' && Array.isArray(rutas))
+    ? rutas.filter(r => (r.chofer === nombreChofer || r.conductor === nombreChofer))
+    : [];
+
+  // 2. Si Supabase está disponible, eliminar cada ruta en la base de datos de forma asíncrona
+  if (typeof _supabase !== 'undefined' && _supabase) {
+    let errorEncontrado = null;
+
+    for (const r of rutasDelChofer) {
+      if (r.id) {
+        const esTemp = typeof r.id === 'string' && (r.id.startsWith('temp_') || r.id.startsWith('ruta_init_'));
+        if (!esTemp) {
+          // 1. Llamada asíncrona real a Supabase utilizando delete().eq('id', ...)
+          const { error } = await _supabase
+            .from('rutas')
+            .delete()
+            .eq('id', r.id);
+
+          // 2. Validar que no devuelva error
+          if (error) {
+            console.error(`❌ Error al eliminar ruta ${r.id} del conductor "${nombreChofer}" en Supabase:`, error.message);
+            errorEncontrado = error;
+            break; // Detener para evitar eliminación incompleta
+          }
+        }
+      }
+    }
+
+    if (errorEncontrado) {
+      alert(`⚠️ No se pudo eliminar el conductor en Supabase: ${errorEncontrado.message || 'Error al eliminar sus rutas asociadas'}.\n\nEl conductor se mantiene en pantalla.`);
+      return; // No quitar de la interfaz si la petición falló
+    }
+
+    // Por seguridad, limpiar registros que aún contengan el conductor en la tabla rutas de Supabase
+    try {
+      await _supabase
+        .from('rutas')
+        .delete()
+        .eq('conductor', nombreChofer);
+    } catch (e) {
+      console.warn('Aviso al limpiar rutas por conductor en Supabase:', e);
+    }
+  }
+
+  // 3. SOLO una vez que Supabase confirme que se ha borrado con éxito:
+  // Eliminar sus rutas del array local
+  rutas = rutas.filter(r => (r.chofer !== nombreChofer && r.conductor !== nombreChofer));
+  window.rutas = rutas;
+
+  // Eliminar el conductor del array local de choferes
+  const idxActual = choferes.findIndex(c => c.nombre === nombreChofer);
+  if (idxActual !== -1) {
+    choferes.splice(idxActual, 1);
+  }
+
+  // Persistir en local y re-renderizar la interfaz
+  guardarDatosEnLocal();
+  renderChoferes();
+  if (typeof refrescarVistasRutas === 'function') {
+    refrescarVistasRutas();
+  }
+
+  if (typeof mostrarToastLogistica === 'function') {
+    mostrarToastLogistica(`✓ Conductor "${nombreChofer}" eliminado correctamente`);
   }
 };
 
@@ -1683,8 +1866,14 @@ function renderDiasSemana() {
   if (!grid) return;
   grid.innerHTML = '';
 
+  const norm = str => str ? str.normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim().toLowerCase() : '';
+
   diasSemana.forEach(dia => {
-    const rutasDelDia = rutas.filter(r => r.dia === dia);
+    // Filtrar EXCLUSIVAMENTE rutas activas (descartando completadas, finalizadas y archivadas)
+    const rutasDelDia = rutas.filter(r => 
+      norm(r.dia) === norm(dia) && 
+      r.estado !== 'completada' && r.estado !== 'finalizada' && r.estado !== 'archivada'
+    );
     const choferesConRuta = [...new Set(rutasDelDia.map(r => (r.conductor || r.chofer)).filter(Boolean))];
 
     grid.innerHTML += `
@@ -1849,8 +2038,14 @@ function renderGridChoferesAsignacion() {
   const badgeTotal = document.getElementById('badge-total-rutas-dia');
   if (!container || !diaSeleccionadoActual) return;
 
-  const rutasDelDia = rutas.filter(r => r.dia && r.dia.trim().toLowerCase() === diaSeleccionadoActual.trim().toLowerCase());
-  if (badgeTotal) badgeTotal.innerText = `${rutasDelDia.length} Ruta(s) Asignada(s)`;
+  const norm = str => str ? str.normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim().toLowerCase() : '';
+
+  // Filtrar EXCLUSIVAMENTE rutas activas (no completadas, ni finalizadas, ni archivadas)
+  const rutasDelDia = rutas.filter(r => 
+    norm(r.dia) === norm(diaSeleccionadoActual) &&
+    r.estado !== 'completada' && r.estado !== 'finalizada' && r.estado !== 'archivada'
+  );
+  if (badgeTotal) badgeTotal.innerText = `${rutasDelDia.length} Ruta(s) Activa(s)`;
 
   container.innerHTML = choferes.map(ch => {
     const rutasDelChofer = rutasDelDia.filter(r => (r.chofer === ch.nombre || r.conductor === ch.nombre));
@@ -1868,15 +2063,21 @@ function renderGridChoferesAsignacion() {
         </div>
 
         <div class="space-y-2 pt-2 border-t border-slate-100">
-          ${rutasDelChofer.length === 0 ? '<p class="text-xs text-slate-400 italic">Sin rutas asignadas este día.</p>' :
+          ${rutasDelChofer.length === 0 ? '<p class="text-xs text-slate-400 italic">Sin rutas pendientes este día.</p>' :
             rutasDelChofer.map((r, rIndex) => `
-              <div class="bg-slate-50 rounded-xl p-3 border ${r.estado === 'completada' || r.estado === 'finalizada' ? 'border-emerald-300 bg-emerald-50/25' : 'border-slate-200'} space-y-1.5 text-xs">
+              <div class="bg-slate-50 rounded-xl p-3 border border-slate-200 space-y-2 text-xs hover:border-blue-300 transition-all">
                 <div class="flex justify-between items-center font-bold text-blue-900">
                   <div class="flex items-center gap-2">
-                    <span><i class="fa-solid fa-route text-blue-600"></i> RUTA ${rIndex + 1} (${r.camion})</span>
-                    ${r.estado === 'completada' || r.estado === 'finalizada' ? '<span class="text-[10px] bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded font-extrabold border border-emerald-200">✓ Finalizada</span>' : ''}
+                    <span><i class="fa-solid fa-route text-blue-600"></i> RUTA ${rIndex + 1} (${r.camion || r.vehiculo || 'Sin camión'})</span>
                   </div>
-                  <button onclick="eliminarRutaConductor('${diaSeleccionadoActual}', '${ch.nombre}', ${rIndex}, '${r.id}')" class="text-slate-400 hover:text-red-500 p-0.5 cursor-pointer" title="Eliminar ruta"><i class="fa-solid fa-trash-can"></i></button>
+                  <div class="flex items-center gap-1.5">
+                    <button type="button" onclick="finalizarRutaDesdePlanificacion('${r.id || ''}')" class="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white text-[11px] font-bold rounded-lg shadow-2xs transition-all flex items-center gap-1 cursor-pointer" title="Finalizar esta ruta y transferirla al Historial">
+                      <i class="fa-solid fa-flag-checkered text-[10px]"></i> Finalizar
+                    </button>
+                    <button type="button" onclick="eliminarRutaConductor('${diaSeleccionadoActual}', '${ch.nombre.replace(/'/g, "\\'")}', ${rIndex}, '${r.id || ''}')" class="text-slate-400 hover:text-red-500 p-1 cursor-pointer transition-colors" title="Eliminar ruta">
+                      <i class="fa-solid fa-trash-can"></i>
+                    </button>
+                  </div>
                 </div>
                 <div class="text-slate-600 space-y-0.5">
                   ${r.clientes ? r.clientes.map((cli, cIdx) => `<div>• ${typeof cli === 'object' && cli !== null ? (cli.nombre || cli.name || '') : cli}</div>`).join('') : ''}
@@ -1889,6 +2090,31 @@ function renderGridChoferesAsignacion() {
   }).join('');
   if (typeof renderVisualizacionRutasChoferes === 'function') renderVisualizacionRutasChoferes();
 }
+
+window.finalizarRutaDesdePlanificacion = async function(rutaId) {
+  if (!rutaId) return;
+  const ruta = rutas.find(r => String(r.id) === String(rutaId));
+  if (!ruta) return;
+
+  const chofer = ruta.chofer || ruta.conductor || '';
+  const dia = ruta.dia || diaSeleccionadoActual || 'este día';
+
+  // Si el modal de cierre está disponible, abrirlo para registrar Km y observaciones opcionales
+  if (typeof prepararCierreRutaModal === 'function') {
+    prepararCierreRutaModal(chofer, ruta.id);
+  } else {
+    if (confirm(`¿Marcar como finalizada la ruta de ${chofer} para el ${dia}?\n\nAl finalizarla, desaparecerá de la planificación semanal activa y se guardará automáticamente en el Historial.`)) {
+      await finalizarRuta(rutaId, {
+        dia: dia,
+        chofer: chofer,
+        obs: `Ruta finalizada desde Planificación Semanal (${dia})`
+      });
+      if (typeof mostrarToastLogistica === 'function') {
+        mostrarToastLogistica(`✓ Ruta de ${chofer} finalizada y registrada en el Historial`);
+      }
+    }
+  }
+};
 
 window.actualizarCabeceraModalAsignarRuta = function() {
   const diaTexto = (typeof diaActualModal !== 'undefined' && diaActualModal) || diaSeleccionadoActual || (typeof diaActual !== 'undefined' ? diaActual : 'Lunes') || 'Lunes';
@@ -2468,7 +2694,7 @@ window.eliminarRutaConductor = async function(dia, choferNombre, rIndex, rutaId)
   let rutaEliminar = null;
   let targetIndex = -1;
 
-  if (rutaId) {
+  if (rutaId && rutaId !== 'undefined' && rutaId !== 'null' && rutaId !== '') {
     targetIndex = rutas.findIndex(r => String(r.id) === String(rutaId));
     if (targetIndex !== -1) {
       rutaEliminar = rutas[targetIndex];
@@ -2480,7 +2706,8 @@ window.eliminarRutaConductor = async function(dia, choferNombre, rIndex, rutaId)
     rutas.forEach((r, i) => {
       const matchDia = r.dia && r.dia.trim().toLowerCase() === dia.trim().toLowerCase();
       const matchChofer = (r.chofer === choferNombre || r.conductor === choferNombre);
-      if (matchDia && matchChofer) {
+      const noCompletada = r.estado !== 'completada' && r.estado !== 'finalizada' && r.estado !== 'archivada';
+      if (matchDia && matchChofer && noCompletada) {
         if (count === Number(rIndex)) {
           targetIndex = i;
           rutaEliminar = r;
@@ -2495,19 +2722,42 @@ window.eliminarRutaConductor = async function(dia, choferNombre, rIndex, rutaId)
     return;
   }
 
-  const idAEliminar = rutaEliminar.id;
+  const idDelRegistro = rutaEliminar.id;
 
-  // 2. Ejecutar la llamada asíncrona a Supabase ANTES de quitar el registro de la interfaz
-  if (typeof eliminarRutaSupabase === 'function' && idAEliminar) {
-    const res = await eliminarRutaSupabase(idAEliminar);
+  // 2. Ejecutar la llamada asíncrona real a Supabase ANTES de quitar el registro de la pantalla
+  if (typeof _supabase !== 'undefined' && _supabase && idDelRegistro) {
+    const esIdLocal = typeof idDelRegistro === 'string' && (idDelRegistro.startsWith('temp_') || idDelRegistro.startsWith('ruta_init_'));
+    if (!esIdLocal) {
+      // 1. Llamada asíncrona real a Supabase utilizando await _supabase.from('rutas').delete().eq('id', idDelRegistro)
+      const { error } = await _supabase
+        .from('rutas')
+        .delete()
+        .eq('id', idDelRegistro);
+
+      // 2. Validar que no devuelva error
+      if (error) {
+        console.error(`❌ Error al eliminar ruta ${idDelRegistro} en Supabase:`, error.message);
+        alert(`⚠️ No se pudo eliminar la ruta en Supabase: ${error.message || 'Error desconocido'}.\n\nEl registro se mantiene en pantalla para evitar inconsistencias.`);
+        return; // No quitar de la interfaz si la petición falló
+      }
+    }
+  } else if (typeof eliminarRutaSupabase === 'function' && idDelRegistro) {
+    const res = await eliminarRutaSupabase(idDelRegistro);
     if (res && res.success === false) {
       alert(`⚠️ No se pudo eliminar la ruta en Supabase: ${res.error?.message || res.error || 'Error desconocido'}.\n\nEl registro se mantiene en pantalla para evitar inconsistencias.`);
-      return; // No quitar de la interfaz si la petición falló
+      return;
     }
   }
 
-  // 3. Quitar del array local de rutas tras la confirmación exitosa de Supabase
-  const indexFinal = rutas.findIndex(r => String(r.id) === String(idAEliminar));
+  // Limpiar metadatos locales asociados
+  const metaLocal = (typeof cargarStorage === 'function') ? cargarStorage('bugamed_rutas_meta', {}) : {};
+  if (metaLocal[idDelRegistro]) {
+    delete metaLocal[idDelRegistro];
+    try { localStorage.setItem('bugamed_rutas_meta', JSON.stringify(metaLocal)); } catch (e) {}
+  }
+
+  // 3. SOLO eliminar del array local de rutas tras la confirmación exitosa de Supabase
+  const indexFinal = rutas.findIndex(r => String(r.id) === String(idDelRegistro));
   if (indexFinal !== -1) {
     rutas.splice(indexFinal, 1);
   }
