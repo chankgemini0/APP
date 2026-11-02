@@ -36,37 +36,99 @@ window._supabase = _supabase;
 let canalRealtimeRutas = null;
 
 /**
+ * Extrae y normaliza de forma segura la columna "clientes" (jsonb o array) recibida desde Supabase.
+ * Soporta arrays directos, strings JSON serializados, u objetos individuales.
+ * Retorna null únicamente si el campo vino indefinido o null (para distinguir de una lista vacía []).
+ */
+function extraerClientesDePayload(clientesRaw) {
+  if (clientesRaw === undefined || clientesRaw === null) {
+    return null;
+  }
+
+  let lista = clientesRaw;
+
+  // Si viene como string (por ejemplo desde JSONB serializado en PostgreSQL o WebSocket)
+  if (typeof lista === 'string') {
+    const trimmed = lista.trim();
+    if (trimmed === '' || trimmed === 'null') {
+      return [];
+    }
+    try {
+      lista = JSON.parse(trimmed);
+    } catch (e) {
+      console.warn('⚠️ No se pudo parsear el JSON de la columna clientes:', e, lista);
+      return [trimmed];
+    }
+  }
+
+  // Si vino un objeto suelto en lugar de un array
+  if (!Array.isArray(lista)) {
+    if (lista && typeof lista === 'object') {
+      lista = [lista];
+    } else if (lista) {
+      lista = [String(lista)];
+    } else {
+      return [];
+    }
+  }
+
+  // Normalizar los elementos (pueden ser strings de nombres o bien objetos { nombre: "..." })
+  return lista.map(item => {
+    if (typeof item === 'object' && item !== null) {
+      return item.nombre || item.name || item.titulo || JSON.stringify(item);
+    }
+    return String(item || '').trim();
+  }).filter(Boolean);
+}
+
+/**
  * Normaliza un registro de Supabase al formato que utiliza la aplicación en memoria.
  * Mapea 'conductor' <-> 'chofer' y 'vehiculo' <-> 'camion'.
  */
 function mapearRutaDesdeSupabase(r) {
   if (!r) return null;
 
+  // Recuperar datos previos en memoria local si existen para no perder día o clientes
+  const rutaExistente = (typeof rutas !== 'undefined' && Array.isArray(rutas))
+    ? rutas.find(x => String(x.id) === String(r.id))
+    : null;
+
   // Recuperar metadatos locales si existen (día y lista de clientes)
   const metaLocal = (typeof cargarStorage === 'function')
     ? (cargarStorage('bugamed_rutas_meta', {})[r.id] || {})
     : {};
 
+  // Extraer clientes de forma robusta desde la columna jsonb remota
+  const clientesRemotos = extraerClientesDePayload(r.clientes);
+  // Si vino explícitamente en el registro remoto (incluso si es []), tiene precedencia sobre la memoria local
+  const clientesFinal = clientesRemotos !== null
+    ? clientesRemotos
+    : (rutaExistente?.clientes || metaLocal.clientes || []);
+
   // Calcular día de la semana si no está presente en la base de datos
   const diasSemanaNombres = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
   const diaCalculado = r.created_at ? diasSemanaNombres[new Date(r.created_at).getDay()] : 'Lunes';
-  const diaFinal = r.dia || metaLocal.dia || (diaCalculado === 'Domingo' ? 'Lunes' : diaCalculado);
+  const diaFinal = r.dia || metaLocal.dia || rutaExistente?.dia || (diaCalculado === 'Domingo' ? 'Lunes' : diaCalculado);
 
-  const conductorFinal = r.conductor || r.chofer || metaLocal.chofer || '';
-  const vehiculoFinal = r.vehiculo || r.camion || metaLocal.camion || '';
-  const clientesFinal = Array.isArray(r.clientes) ? r.clientes : (metaLocal.clientes || []);
+  const conductorFinal = (r.conductor !== undefined && r.conductor !== null && String(r.conductor).trim() !== '')
+    ? String(r.conductor).trim()
+    : ((r.chofer !== undefined && r.chofer !== null && String(r.chofer).trim() !== '')
+      ? String(r.chofer).trim()
+      : (rutaExistente?.conductor || rutaExistente?.chofer || metaLocal.chofer || 'Sin conductor'));
+
+  const vehiculoFinal = r.vehiculo || r.camion || rutaExistente?.vehiculo || rutaExistente?.camion || metaLocal.camion || '';
 
   return {
     id: r.id,
-    created_at: r.created_at,
+    created_at: r.created_at || rutaExistente?.created_at || new Date().toISOString(),
     conductor: conductorFinal,
     chofer: conductorFinal,
     vehiculo: vehiculoFinal,
     camion: vehiculoFinal,
-    estado: r.estado || 'pendiente',
+    estado: r.estado || rutaExistente?.estado || 'pendiente',
     dia: diaFinal,
     clientes: clientesFinal,
-    tipoCliente: r.tipoCliente || metaLocal.tipoCliente || 'Mixto'
+    tipoCliente: r.tipoCliente || metaLocal.tipoCliente || rutaExistente?.tipoCliente || 'Mixto'
   };
 }
 
@@ -100,6 +162,7 @@ async function cargarRutasDesdeSupabase() {
         const rutasMapeadas = data.map(mapearRutaDesdeSupabase).filter(Boolean);
         rutas = rutasMapeadas;
         window.rutas = rutas;
+        asegurarConductoresDesdeRutas();
         if (typeof guardarDatosEnLocal === 'function') guardarDatosEnLocal();
       } else {
         console.log('Tabla "rutas" en Supabase vacía. Migrando rutas locales iniciales a Supabase...');
@@ -185,11 +248,13 @@ async function insertarRutaSupabase({ conductor, vehiculo, estado = 'pendiente',
   }
 
   try {
-    // La tabla "rutas" en Supabase cuenta con: conductor, vehiculo, estado (id y created_at autogenerados)
+    // La tabla "rutas" en Supabase cuenta con: conductor, vehiculo, estado, clientes (jsonb)
+    const clientesNormalizados = Array.isArray(clientes) ? clientes : (extraerClientesDePayload(clientes) || []);
     const payload = {
       conductor: cond,
       vehiculo: veh,
-      estado: est
+      estado: est,
+      clientes: clientesNormalizados
     };
 
     const { data, error } = await _supabase
@@ -274,6 +339,89 @@ async function actualizarEstadoRutaSupabase(id, nuevoEstado) {
 }
 
 /**
+ * 3.1. UPDATE CONDUCTOR: Actualizar el conductor de una ruta en Supabase y de forma optimista
+ */
+async function actualizarConductorRutaSupabase(id, nuevoConductor) {
+  if (!id || !nuevoConductor) return null;
+  return actualizarRutaSupabase(id, { conductor: nuevoConductor });
+}
+
+/**
+ * 3.2. UPDATE GENÉRICO: Actualizar campos de una ruta en Supabase (conductor, vehiculo, estado, etc.)
+ */
+async function actualizarRutaSupabase(id, campos) {
+  if (!id || !campos) return null;
+
+  // Actualización optimista local en memoria
+  const index = rutas.findIndex(r => String(r.id) === String(id));
+  if (index !== -1) {
+    if (campos.conductor !== undefined) {
+      rutas[index].conductor = campos.conductor;
+      rutas[index].chofer = campos.conductor;
+    }
+    if (campos.vehiculo !== undefined) {
+      rutas[index].vehiculo = campos.vehiculo;
+      rutas[index].camion = campos.vehiculo;
+    }
+    if (campos.estado !== undefined) {
+      rutas[index].estado = campos.estado;
+    }
+    if (campos.clientes !== undefined) {
+      rutas[index].clientes = Array.isArray(campos.clientes) ? campos.clientes : (extraerClientesDePayload(campos.clientes) || []);
+    }
+    if (campos.dia !== undefined) {
+      rutas[index].dia = campos.dia;
+    }
+    if (campos.tipoCliente !== undefined) {
+      rutas[index].tipoCliente = campos.tipoCliente;
+    }
+    window.rutas = rutas;
+    if (typeof guardarDatosEnLocal === 'function') guardarDatosEnLocal();
+    refrescarVistasRutas();
+  }
+
+  if (!_supabase) return null;
+
+  if (String(id).startsWith('temp_') || String(id).startsWith('ruta_init_')) {
+    return null;
+  }
+
+  try {
+    const payloadUpdate = {};
+    if (campos.conductor !== undefined) payloadUpdate.conductor = campos.conductor;
+    if (campos.vehiculo !== undefined) payloadUpdate.vehiculo = campos.vehiculo;
+    if (campos.estado !== undefined) payloadUpdate.estado = campos.estado;
+    if (campos.clientes !== undefined) {
+      payloadUpdate.clientes = Array.isArray(campos.clientes) ? campos.clientes : (extraerClientesDePayload(campos.clientes) || []);
+    }
+
+    const { data, error } = await _supabase
+      .from('rutas')
+      .update(payloadUpdate)
+      .eq('id', id)
+      .select();
+
+    if (error) {
+      console.error(`Error actualizando ruta ${id} en Supabase:`, error.message);
+      return null;
+    }
+
+    console.log(`✓ Ruta ${id} actualizada exitosamente en Supabase:`, data);
+    return data && data[0] ? data[0] : null;
+  } catch (err) {
+    console.error(`Excepción al actualizar ruta ${id} en Supabase:`, err);
+    return null;
+  }
+}
+
+/**
+ * 3.3. UPDATE CLIENTES: Actualizar específicamente el array jsonb de clientes de una ruta
+ */
+async function actualizarClientesRutaSupabase(id, clientes) {
+  return actualizarRutaSupabase(id, { clientes });
+}
+
+/**
  * 4. DELETE: Eliminar una ruta de Supabase
  */
 async function eliminarRutaSupabase(id) {
@@ -311,25 +459,55 @@ async function eliminarRutaSupabase(id) {
 
 /**
  * 5. REALTIME: Suscribirse a cambios en tiempo real en la tabla "rutas"
+ * Escucha explícitamente eventos 'INSERT' y 'UPDATE' (así como 'DELETE')
+ * garantizando la captura de payload.new en todos los clientes conectados.
  */
 function suscribirRutasRealtime() {
-  if (!_supabase) return;
-
-  if (canalRealtimeRutas) {
-    _supabase.removeChannel(canalRealtimeRutas);
+  if (!_supabase) {
+    console.warn('⚠️ Cliente Supabase no disponible para Realtime.');
+    return;
   }
+
+  // Eliminar canal previo si existía para evitar listeners duplicados
+  if (canalRealtimeRutas) {
+    console.log('🔄 Removiendo canal Realtime existente antes de reconectar...');
+    _supabase.removeChannel(canalRealtimeRutas);
+    canalRealtimeRutas = null;
+  }
+
+  console.log('📡 Conectando canal Realtime "bugamed-rutas-realtime" para tabla "rutas"...');
 
   canalRealtimeRutas = _supabase
     .channel('bugamed-rutas-realtime')
     .on(
       'postgres_changes',
-      { event: '*', schema: 'public', table: 'rutas' },
+      { event: 'INSERT', schema: 'public', table: 'rutas' },
       (payload) => {
+        console.log('⚡ [Realtime INSERT] Evento capturado:', payload);
         procesarEventoRealtime(payload);
       }
     )
-    .subscribe((status) => {
+    .on(
+      'postgres_changes',
+      { event: 'UPDATE', schema: 'public', table: 'rutas' },
+      (payload) => {
+        console.log('⚡ [Realtime UPDATE] Evento capturado:', payload);
+        procesarEventoRealtime(payload);
+      }
+    )
+    .on(
+      'postgres_changes',
+      { event: 'DELETE', schema: 'public', table: 'rutas' },
+      (payload) => {
+        console.log('⚡ [Realtime DELETE] Evento capturado:', payload);
+        procesarEventoRealtime(payload);
+      }
+    )
+    .subscribe((status, err) => {
       console.log('📡 Estado de conexión Realtime Supabase:', status);
+      if (err) {
+        console.error('❌ Error en canal Realtime Supabase:', err);
+      }
       if (status === 'SUBSCRIBED') {
         actualizarBadgeSupabase('conectado');
       } else if (status === 'CLOSED' || status === 'CHANNEL_ERROR') {
@@ -339,51 +517,179 @@ function suscribirRutasRealtime() {
 }
 
 /**
- * Procesa los eventos entrantes de Supabase Realtime (INSERT, UPDATE, DELETE)
+ * Procesa los eventos entrantes de Supabase Realtime (INSERT, UPDATE, DELETE).
+ * Captura el objeto completo payload.new, actualiza la lista local de rutas y
+ * re-renderiza la interfaz inmediatamente sin recargar.
  */
 function procesarEventoRealtime(payload) {
-  console.log('⚡ Evento en tiempo real recibido de Supabase:', payload.eventType, payload);
+  if (!payload) return;
 
-  const { eventType, new: nuevoRegistro, old: viejoRegistro } = payload;
+  const eventType = (payload.eventType || payload.type || '').toUpperCase();
+  const nuevoRegistro = payload.new;
+  const viejoRegistro = payload.old;
+
+  console.log(`⚡ Procesando evento Realtime [${eventType}] en tabla "rutas":`, {
+    nuevo: nuevoRegistro,
+    viejo: viejoRegistro
+  });
 
   if (eventType === 'INSERT') {
-    const yaExiste = rutas.some(r => String(r.id) === String(nuevoRegistro.id));
-    if (!yaExiste) {
-      const rutaMapeada = mapearRutaDesdeSupabase(nuevoRegistro);
+    if (!nuevoRegistro || !nuevoRegistro.id) {
+      console.warn('⚠️ Evento INSERT recibido sin payload.new válido:', payload);
+      return;
+    }
+
+    const nuevoId = String(nuevoRegistro.id);
+    const rutaMapeada = mapearRutaDesdeSupabase(nuevoRegistro);
+
+    // Extraer clientes explícitamente desde payload.new.clientes
+    const clientesNuevos = extraerClientesDePayload(nuevoRegistro.clientes);
+    if (clientesNuevos !== null) {
+      rutaMapeada.clientes = clientesNuevos;
+    }
+
+    // 1. Comprobar si reemplaza una ruta temporal optimista pendiente
+    const tempIndex = rutas.findIndex(r => 
+      String(r.id).startsWith('temp_') && 
+      ((r.conductor && r.conductor === rutaMapeada.conductor) || (r.chofer && r.chofer === rutaMapeada.conductor))
+    );
+
+    // 2. Comprobar si ya existe por ID
+    const indexExistente = rutas.findIndex(r => String(r.id) === nuevoId);
+
+    if (tempIndex !== -1) {
+      rutas[tempIndex] = {
+        ...rutas[tempIndex],
+        ...rutaMapeada,
+        id: nuevoRegistro.id
+      };
+      console.log(`✓ Ruta temporal local confirmada con ID de Supabase: ${nuevoRegistro.id}`);
+    } else if (indexExistente !== -1) {
+      rutas[indexExistente] = {
+        ...rutas[indexExistente],
+        ...rutaMapeada
+      };
+      console.log(`✓ Ruta existente ${nuevoId} actualizada tras INSERT`);
+    } else {
       rutas.unshift(rutaMapeada);
+      console.log(`✓ Nueva ruta agregada en tiempo real. Conductor: "${rutaMapeada.conductor}" con ${rutaMapeada.clientes.length} clientes`);
+    }
+
+    // Sincronizar metadatos locales
+    const metaLocal = (typeof cargarStorage === 'function') ? cargarStorage('bugamed_rutas_meta', {}) : {};
+    metaLocal[nuevoId] = {
+      dia: rutaMapeada.dia,
+      clientes: rutaMapeada.clientes,
+      tipoCliente: rutaMapeada.tipoCliente
+    };
+    try { localStorage.setItem('bugamed_rutas_meta', JSON.stringify(metaLocal)); } catch (e) {}
+
+    // 3. Registrar el conductor si no existe localmente para que se visualice
+    asegurarConductoresDesdeRutas();
+
+    window.rutas = rutas;
+    if (typeof guardarDatosEnLocal === 'function') guardarDatosEnLocal();
+    refrescarVistasRutas();
+
+    if (typeof mostrarToastLogistica === 'function') {
+      const nombreChof = rutaMapeada.conductor || rutaMapeada.chofer || 'Conductor';
+      mostrarToastLogistica(`⚡ Nueva ruta sincronizada para: ${nombreChof} (${rutaMapeada.clientes.length} paradas)`);
+    }
+  } else if (eventType === 'UPDATE') {
+    if (!nuevoRegistro || !nuevoRegistro.id) {
+      console.warn('⚠️ Evento UPDATE recibido sin payload.new válido:', payload);
+      return;
+    }
+
+    const nuevoId = String(nuevoRegistro.id);
+    const index = rutas.findIndex(r => String(r.id) === nuevoId);
+    const rutaMapeada = mapearRutaDesdeSupabase(nuevoRegistro);
+
+    // Extraer la columna "clientes" explícitamente desde payload.new
+    const clientesNuevos = extraerClientesDePayload(nuevoRegistro.clientes);
+
+    if (index !== -1) {
+      const rutaAnterior = { ...rutas[index] };
+      const conductorAnterior = rutaAnterior.conductor || rutaAnterior.chofer || '';
+      const nuevoConductor = rutaMapeada.conductor || nuevoRegistro.conductor || nuevoRegistro.chofer || conductorAnterior;
+      const estadoAnterior = rutaAnterior.estado;
+      const clientesAnteriores = rutaAnterior.clientes || [];
+
+      // Si vinieron clientes en payload.new (incluso si es un array vacío []), aplicarlos directamente
+      const clientesActualizados = clientesNuevos !== null
+        ? clientesNuevos
+        : (rutaMapeada.clientes !== undefined ? rutaMapeada.clientes : clientesAnteriores);
+
+      console.log(`🔄 Actualizando ruta ${nuevoId} localmente. Conductor: "${conductorAnterior}" -> "${nuevoConductor}", Clientes: ${clientesAnteriores.length} -> ${clientesActualizados.length}`);
+
+      // Actualizar TODOS los campos del elemento en la lista local de rutas
+      rutas[index] = {
+        ...rutas[index],
+        ...rutaMapeada,
+        conductor: nuevoConductor,
+        chofer: nuevoConductor,
+        vehiculo: rutaMapeada.vehiculo || nuevoRegistro.vehiculo || nuevoRegistro.camion || rutas[index].vehiculo,
+        camion: rutaMapeada.camion || nuevoRegistro.vehiculo || nuevoRegistro.camion || rutas[index].camion,
+        estado: nuevoRegistro.estado !== undefined ? nuevoRegistro.estado : rutas[index].estado,
+        dia: rutaMapeada.dia || rutas[index].dia,
+        clientes: clientesActualizados
+      };
+
+      // Actualizar metadatos locales vinculados
+      const metaLocal = (typeof cargarStorage === 'function') ? cargarStorage('bugamed_rutas_meta', {}) : {};
+      metaLocal[nuevoId] = {
+        dia: rutas[index].dia,
+        clientes: clientesActualizados,
+        tipoCliente: rutas[index].tipoCliente
+      };
+      try { localStorage.setItem('bugamed_rutas_meta', JSON.stringify(metaLocal)); } catch (e) {}
+
+      // Si el conductor asignado cambió y la ruta estaba en curso, liberar el servicio activo del conductor previo
+      if (conductorAnterior && conductorAnterior !== nuevoConductor) {
+        if (typeof serviciosActivos !== 'undefined' && serviciosActivos[conductorAnterior]?.rutaId === nuevoRegistro.id) {
+          delete serviciosActivos[conductorAnterior];
+          console.log(`🧹 Servicio activo desvinculado del conductor anterior: ${conductorAnterior}`);
+        }
+      }
+
+      // Sincronizar clientes también en el servicio activo en tiempo real si el chofer está en ruta
+      if (typeof serviciosActivos !== 'undefined') {
+        const conductorActivo = nuevoConductor || conductorAnterior;
+        if (serviciosActivos[conductorActivo] && String(serviciosActivos[conductorActivo].rutaId) === nuevoId) {
+          serviciosActivos[conductorActivo].clientes = [...clientesActualizados];
+        }
+      }
+
+      // Sincronizar estado de servicio en vivo si otro usuario inició o completó la ruta
+      sincronizarServicioActivoDesdeRealtime(nuevoRegistro, rutas[index]);
+
+      // Asegurar que el conductor nuevo/actualizado exista en la lista local de choferes
+      asegurarConductoresDesdeRutas();
+
       window.rutas = rutas;
       if (typeof guardarDatosEnLocal === 'function') guardarDatosEnLocal();
       refrescarVistasRutas();
 
       if (typeof mostrarToastLogistica === 'function') {
-        mostrarToastLogistica(`⚡ Nueva ruta sincronizada: ${rutaMapeada.chofer} (${rutaMapeada.camion})`);
-      }
-    }
-  } else if (eventType === 'UPDATE') {
-    const index = rutas.findIndex(r => String(r.id) === String(nuevoRegistro.id));
-    if (index !== -1) {
-      const estadoAnterior = rutas[index].estado;
-      rutas[index].estado = nuevoRegistro.estado;
-      rutas[index].conductor = nuevoRegistro.conductor;
-      rutas[index].chofer = nuevoRegistro.conductor;
-      rutas[index].vehiculo = nuevoRegistro.vehiculo;
-      rutas[index].camion = nuevoRegistro.vehiculo;
-
-      // Sincronizar estado de servicio en vivo si otro usuario inició o completó la ruta
-      sincronizarServicioActivoDesdeRealtime(nuevoRegistro, rutas[index]);
-
-      window.rutas = rutas;
-      if (typeof guardarDatosEnLocal === 'function') guardarDatosEnLocal();
-      refrescarVistasRutas();
-
-      if (estadoAnterior !== nuevoRegistro.estado && typeof mostrarToastLogistica === 'function') {
-        mostrarToastLogistica(`⚡ Ruta de ${rutas[index].chofer} cambió a: "${nuevoRegistro.estado}"`);
+        if (conductorAnterior && conductorAnterior !== nuevoConductor) {
+          mostrarToastLogistica(`⚡ Ruta reasignada: Conductor cambiado a "${nuevoConductor}"`);
+        } else if (estadoAnterior !== nuevoRegistro.estado) {
+          mostrarToastLogistica(`⚡ Ruta de ${nuevoConductor} cambió a: "${nuevoRegistro.estado}"`);
+        } else if (clientesNuevos !== null && clientesNuevos.length !== clientesAnteriores.length) {
+          mostrarToastLogistica(`⚡ Clientes actualizados en ruta de ${nuevoConductor} (${clientesActualizados.length} paradas)`);
+        }
       }
     } else {
-      rutas.unshift(mapearRutaDesdeSupabase(nuevoRegistro));
+      // Si la ruta no estaba en la lista local de este dispositivo, agregarla
+      if (clientesNuevos !== null) {
+        rutaMapeada.clientes = clientesNuevos;
+      }
+      rutas.unshift(rutaMapeada);
+      asegurarConductoresDesdeRutas();
       window.rutas = rutas;
       if (typeof guardarDatosEnLocal === 'function') guardarDatosEnLocal();
       refrescarVistasRutas();
+      console.log(`✓ Ruta incorporada tras UPDATE con conductor: "${rutaMapeada.conductor}" (${rutaMapeada.clientes.length} clientes)`);
     }
   } else if (eventType === 'DELETE') {
     const idEliminar = viejoRegistro?.id;
@@ -397,6 +703,46 @@ function procesarEventoRealtime(payload) {
         if (typeof mostrarToastLogistica === 'function') {
           mostrarToastLogistica(`⚡ Una ruta fue eliminada.`);
         }
+      }
+    }
+  }
+}
+
+/**
+ * Garantiza que cualquier conductor registrado en la columna "conductor" de la tabla "rutas"
+ * exista también en la lista de conductores en memoria (choferes) de cada dispositivo.
+ * Esto asegura que renderGridChoferesAsignacion, renderVisualizacionRutasChoferes y otros
+ * selectores puedan renderizar la tarjeta y las rutas del nuevo conductor automáticamente.
+ */
+function asegurarConductoresDesdeRutas() {
+  if (typeof rutas === 'undefined' || !Array.isArray(rutas) || typeof choferes === 'undefined' || !Array.isArray(choferes)) {
+    return;
+  }
+
+  let modificado = false;
+  rutas.forEach(r => {
+    const nombre = (r.conductor || r.chofer || '').trim();
+    if (!nombre || nombre === 'Sin conductor' || nombre === 'General') return;
+
+    const existe = choferes.some(ch => ch.nombre && ch.nombre.trim().toLowerCase() === nombre.toLowerCase());
+    if (!existe) {
+      console.log(`👤 Conductor "${nombre}" detectado en tabla "rutas". Agregando automáticamente a la lista local de choferes.`);
+      choferes.push({
+        nombre: nombre,
+        dni: 'Registrado en ruta',
+        telefono: '',
+        foto: ''
+      });
+      modificado = true;
+    }
+  });
+
+  if (modificado) {
+    if (typeof guardarDatosEnLocal === 'function') {
+      try {
+        localStorage.setItem('bugamed_choferes', JSON.stringify(choferes));
+      } catch (e) {
+        console.warn('Error guardando choferes:', e);
       }
     }
   }
@@ -439,16 +785,39 @@ function sincronizarServicioActivoDesdeRealtime(nuevoRegistro, rutaLocal) {
 }
 
 /**
- * Refresca todas las interfaces dependientes de rutas en la app
+ * Refresca todas las interfaces dependientes de rutas en la app en tiempo real
  */
 function refrescarVistasRutas() {
+  // 1. Sincronizar conductores de rutas con la lista de personal
+  if (typeof asegurarConductoresDesdeRutas === 'function') {
+    asegurarConductoresDesdeRutas();
+  }
+
+  // 2. Calendario semanal de rutas y asignación por conductor
   if (typeof renderDiasSemana === 'function') renderDiasSemana();
   if (typeof renderGridChoferesAsignacion === 'function') renderGridChoferesAsignacion();
+
+  // 3. Desglose y cuadrícula de rutas por chofer
   if (typeof renderVisualizacionRutasChoferes === 'function') renderVisualizacionRutasChoferes();
+  if (typeof actualizarSelectPortalChoferes === 'function') actualizarSelectPortalChoferes();
+
+  // 4. Módulo de logística y fichaje
   if (typeof actualizarListadoRutasParaInicio === 'function') actualizarListadoRutasParaInicio();
   if (typeof actualizarEstadoFichajeInterfaz === 'function') actualizarEstadoFichajeInterfaz();
+  if (typeof renderModuloLogistica === 'function') renderModuloLogistica();
+
+  // 5. Selector de ruta al fichar chofer si está activo en pantalla
+  const inputChofer = document.getElementById('fichaje-chofer-input');
+  if (inputChofer && inputChofer.value && typeof actualizarSelectorRutasParaChoferInicio === 'function') {
+    actualizarSelectorRutasParaChoferInicio(inputChofer.value);
+  }
+
+  // 6. Personal y flota
   if (typeof renderChoferes === 'function') renderChoferes();
   if (typeof renderCamiones === 'function') renderCamiones();
+
+  // 7. Historial y contadores KPI
+  if (typeof renderHistorialChoferesGrid === 'function') renderHistorialChoferesGrid();
   if (typeof actualizarKPIs === 'function') actualizarKPIs();
 }
 
@@ -497,12 +866,17 @@ async function iniciarSupabaseApp() {
 }
 
 // Exponer funciones principales en window para acceso global
+window.extraerClientesDePayload = extraerClientesDePayload;
 window.cargarRutasDesdeSupabase = cargarRutasDesdeSupabase;
 window.insertarRutaSupabase = insertarRutaSupabase;
 window.actualizarEstadoRutaSupabase = actualizarEstadoRutaSupabase;
+window.actualizarConductorRutaSupabase = actualizarConductorRutaSupabase;
+window.actualizarRutaSupabase = actualizarRutaSupabase;
+window.actualizarClientesRutaSupabase = actualizarClientesRutaSupabase;
 window.eliminarRutaSupabase = eliminarRutaSupabase;
 window.suscribirRutasRealtime = suscribirRutasRealtime;
 window.iniciarSupabaseApp = iniciarSupabaseApp;
 window.refrescarVistasRutas = refrescarVistasRutas;
+window.asegurarConductoresDesdeRutas = asegurarConductoresDesdeRutas;
 window.actualizarBadgeSupabase = actualizarBadgeSupabase;
 

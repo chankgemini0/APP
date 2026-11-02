@@ -9,16 +9,47 @@ function cargarStorage(clave, valorPorDefecto) {
   }
 }
 
+function esFotoValida(url) {
+  if (!url || typeof url !== 'string') return false;
+  const s = url.trim().toLowerCase();
+  // Filtra rutas huérfanas, erróneas o de prueba comunes que provocan errores 404
+  if (s === '' || s === '/ui' || s === 'ui' || s === '/yui' || s === 'yui' || s === 'undefined' || s === 'null') {
+    return false;
+  }
+  return true;
+}
+window.esFotoValida = esFotoValida;
+
+function sanitizarChoferesStorage(lista) {
+  if (!Array.isArray(lista)) return lista;
+  let modificado = false;
+  const limpia = lista.map(ch => {
+    if (ch && ch.foto && !esFotoValida(ch.foto)) {
+      ch.foto = '';
+      modificado = true;
+    }
+    return ch;
+  });
+  if (modificado) {
+    try {
+      localStorage.setItem('bugamed_choferes', JSON.stringify(limpia));
+    } catch (e) {
+      console.warn('Error al guardar choferes saneados:', e);
+    }
+  }
+  return limpia;
+}
+
 // Variables Globales de Datos
 let camiones = cargarStorage('bugamed_camiones', [
   { matricula: '4589-KLL', modelo: 'Iveco Daily 35-160', tipo: 'Pequeño', estado: 'Libre', foto: '' },
   { matricula: '8912-MBN', modelo: 'Iveco Stralis 360 E6', tipo: 'Grande', estado: 'Libre', foto: '' }
 ]);
 
-let choferes = cargarStorage('bugamed_choferes', [
+let choferes = sanitizarChoferesStorage(cargarStorage('bugamed_choferes', [
   { nombre: 'Antonio Fernández', dni: '44556677A', telefono: '+34 612 987 654', foto: '' },
   { nombre: 'David Morales', dni: '88776655B', telefono: '+34 655 443 322', foto: '' }
-]);
+]));
 
 let clientes = cargarStorage('bugamed_clientes', [
   { nombre: 'Hotel Meliá Palma', zona: 'Tarragona', tipo: 'Hoteles', direccion: 'Passeig Marítim 12', telefono: '+34 971 111 222', ubicacion: 'https://www.google.com/maps/search/?api=1&query=Hotel+Melia+Palma+Passeig+Maritim+12+Tarragona' },

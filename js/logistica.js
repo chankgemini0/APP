@@ -148,7 +148,9 @@ window.abrirSelectorChoferesInicio = function() {
     grid.innerHTML = choferesDisponibles.map(ch => `
       <div onclick="seleccionarChoferInicio('${ch.nombre.replace(/'/g, "\\'")}', '${ch.foto || ''}')" class="light-card light-card-hover rounded-2xl p-4 border border-slate-200 cursor-pointer flex flex-col items-center text-center space-y-2 group">
         <div class="w-16 h-16 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center overflow-hidden border-2 border-blue-200 group-hover:border-blue-600 transition-all shadow-inner">
-          ${ch.foto ? `<img src="${ch.foto}" class="w-full h-full object-cover" alt="${ch.nombre}">` : '<i class="fa-solid fa-user text-2xl"></i>'}
+          ${(ch.foto && (typeof esFotoValida !== 'function' || esFotoValida(ch.foto))) 
+            ? `<img src="${ch.foto}" class="w-full h-full object-cover" alt="${ch.nombre}" onerror="this.onerror=null; this.parentElement.innerHTML='<i class=\\\'fa-solid fa-user text-2xl\\\'></i>';">` 
+            : '<i class="fa-solid fa-user text-2xl"></i>'}
         </div>
         <div>
           <h4 class="font-extrabold text-slate-900 text-sm leading-tight">${ch.nombre}</h4>
@@ -174,7 +176,9 @@ window.seleccionarChoferInicio = function(nombre, foto) {
   if (input) input.value = nombre;
   if (prevNombre) prevNombre.innerText = nombre;
   if (prevImg) {
-    prevImg.innerHTML = foto ? `<img src="${foto}" class="w-full h-full object-cover">` : `<span class="font-bold text-sm">${nombre.charAt(0)}</span>`;
+    prevImg.innerHTML = (foto && (typeof esFotoValida !== 'function' || esFotoValida(foto))) 
+      ? `<img src="${foto}" class="w-full h-full object-cover" onerror="this.onerror=null; this.parentElement.innerHTML='<span class=\\\'font-bold text-sm\\\'>${nombre.charAt(0)}</span>';">` 
+      : `<span class="font-bold text-sm">${nombre.charAt(0)}</span>`;
   }
 
   cerrarSelectorChoferes();
@@ -374,12 +378,14 @@ window.actualizarListadoRutasParaInicio = function() {
             <i class="fa-solid fa-list-ol text-blue-500"></i> Paradas del recorrido:
           </p>
           <div class="bg-slate-50 p-3 rounded-xl border border-slate-200 space-y-2">
-            ${numClientes === 0 ? '<p class="text-xs text-slate-400 italic">Sin clientes asignados.</p>' : r.clientes.map((cNombre, cIdx) => `
+            ${numClientes === 0 ? '<p class="text-xs text-slate-400 italic">Sin clientes asignados.</p>' : r.clientes.map((cItem, cIdx) => {
+              const cNombre = typeof cItem === 'object' && cItem !== null ? (cItem.nombre || cItem.name || '') : String(cItem || '');
+              return `
               <div class="bg-white p-2.5 rounded-xl border border-slate-200 flex items-center gap-2.5 shadow-2xs">
                 <span class="w-5 h-5 rounded-md bg-blue-100 text-blue-700 font-black flex items-center justify-center text-[10px] shrink-0">${cIdx + 1}</span>
                 <p class="font-bold text-slate-800 text-xs whitespace-normal break-words flex-1">${cNombre}</p>
               </div>
-            `).join('')}
+            `;}).join('')}
           </div>
         </div>
 
@@ -637,7 +643,8 @@ function renderAcordeonRutasActivas(choferesEnRuta) {
 
           <!-- REJILLA COMPACTA DE TARJETAS DE CLIENTES DE LA RUTA ACTIVA -->
           <div id="grid-clientes-activos-${choferNombre}" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-2 xl:grid-cols-3 gap-3 max-h-[560px] overflow-y-auto custom-scrollbar pr-1">
-            ${servicio.clientes.map((clienteNombre, idx) => {
+            ${servicio.clientes.map((clienteItem, idx) => {
+              const clienteNombre = typeof clienteItem === 'object' && clienteItem !== null ? (clienteItem.nombre || clienteItem.name || '') : String(clienteItem || '');
               const key = `${servicio.chofer}_${clienteNombre}`;
               const env = envasesPorClienteRuta[key] || { entregados: 0, recogidos: 0, completado: false };
               const cliInfo = (typeof clientes !== 'undefined' && Array.isArray(clientes))
@@ -1003,7 +1010,7 @@ function actualizarSelectorRutasParaChoferInicio(choferNombre) {
             </div>
             <div class="text-[11px] text-slate-600 pt-1">
               <p class="font-semibold text-slate-700">Clientes (${r.clientes ? r.clientes.length : 0}):</p>
-              <p class="italic text-slate-500 truncate">${r.clientes ? r.clientes.join(', ') : 'Ninguno'}</p>
+              <p class="italic text-slate-500 truncate">${r.clientes && r.clientes.length > 0 ? r.clientes.map(c => typeof c === 'object' && c !== null ? (c.nombre || c.name || '') : c).join(', ') : 'Ninguno'}</p>
             </div>
           </div>
         `).join('')}
@@ -1169,7 +1176,7 @@ window.renderVisualizacionRutasChoferes = function() {
 
   grid.innerHTML = choferes.map(ch => {
     const rutasDelChofer = (typeof rutas !== 'undefined' && Array.isArray(rutas)) 
-      ? rutas.filter(r => r.chofer && r.chofer.trim().toLowerCase() === ch.nombre.trim().toLowerCase()) 
+      ? rutas.filter(r => (r.chofer || r.conductor) && (r.chofer || r.conductor).trim().toLowerCase() === ch.nombre.trim().toLowerCase()) 
       : [];
     const diasConRuta = new Set(rutasDelChofer.map(r => r.dia)).size;
     const estaEnRuta = !!(serviciosActivos && serviciosActivos[ch.nombre]);
@@ -1183,7 +1190,9 @@ window.renderVisualizacionRutasChoferes = function() {
       <div onclick="verDetalleRutasChofer('${ch.nombre.replace(/'/g, "\\'")}')" class="light-card light-card-hover rounded-2xl p-4 border ${estaEnRuta ? 'border-emerald-300 bg-emerald-50/30' : 'border-slate-200'} cursor-pointer hover:border-indigo-400 hover:shadow-md transition-all group flex flex-col justify-between gap-3">
         <div class="flex items-center gap-3">
           <div class="w-11 h-11 rounded-xl ${estaEnRuta ? 'bg-emerald-100 text-emerald-600 border-emerald-200' : 'bg-indigo-50 text-indigo-600 border-indigo-100'} flex items-center justify-center overflow-hidden border-2 group-hover:border-indigo-500 transition-all shadow-inner shrink-0">
-            ${ch.foto ? `<img src="${ch.foto}" class="w-full h-full object-cover" alt="${ch.nombre}">` : '<i class="fa-solid fa-user text-lg"></i>'}
+            ${(ch.foto && (typeof esFotoValida !== 'function' || esFotoValida(ch.foto))) 
+              ? `<img src="${ch.foto}" class="w-full h-full object-cover" alt="${ch.nombre}" onerror="this.onerror=null; this.parentElement.innerHTML='<i class=\\\'fa-solid fa-user text-lg\\\'></i>';">` 
+              : '<i class="fa-solid fa-user text-lg"></i>'}
           </div>
           <div class="flex-1 min-w-0">
             <div class="flex items-center gap-2">
@@ -1241,8 +1250,8 @@ window.verDetalleRutasChofer = function(nombreChofer) {
   if (titNombre) titNombre.innerText = ch.nombre;
   if (subInfo) subInfo.innerText = `DNI: ${ch.dni || 'No especificado'}${ch.telefono ? ' | Tel: ' + ch.telefono : ''}`;
   if (avatarCont) {
-    avatarCont.innerHTML = ch.foto 
-      ? `<img src="${ch.foto}" class="w-full h-full object-cover" alt="${ch.nombre}">` 
+    avatarCont.innerHTML = (ch.foto && (typeof esFotoValida !== 'function' || esFotoValida(ch.foto))) 
+      ? `<img src="${ch.foto}" class="w-full h-full object-cover" alt="${ch.nombre}" onerror="this.onerror=null; this.parentElement.innerHTML='<i class=\\\'fa-solid fa-user text-xl\\\'></i>';">` 
       : `<i class="fa-solid fa-user text-xl"></i>`;
   }
 
@@ -1251,7 +1260,7 @@ window.verDetalleRutasChofer = function(nombreChofer) {
 
   const diasOrdenados = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado', 'Domingo'];
   const rutasDelChofer = (typeof rutas !== 'undefined' && Array.isArray(rutas))
-    ? rutas.filter(r => r.chofer && r.chofer.trim().toLowerCase() === nombreChofer.trim().toLowerCase())
+    ? rutas.filter(r => (r.chofer || r.conductor) && (r.chofer || r.conductor).trim().toLowerCase() === nombreChofer.trim().toLowerCase())
     : [];
 
   if (badgeTotal) {
@@ -1394,7 +1403,8 @@ window.verDetalleRutasChofer = function(nombreChofer) {
                   ? '<p class="text-xs text-slate-400 italic py-2">No hay establecimientos asignados a esta ruta.</p>'
                   : `
                     <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-2.5">
-                      ${r.clientes.map((clienteNombre, cIdx) => {
+                      ${r.clientes.map((clienteItem, cIdx) => {
+                        const clienteNombre = typeof clienteItem === 'object' && clienteItem !== null ? (clienteItem.nombre || clienteItem.name || '') : String(clienteItem || '');
                         const cliInfo = (typeof clientes !== 'undefined' && Array.isArray(clientes)) 
                           ? clientes.find(c => c.nombre && c.nombre.trim().toLowerCase() === clienteNombre.trim().toLowerCase()) 
                           : null;

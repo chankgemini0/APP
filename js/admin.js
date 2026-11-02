@@ -227,8 +227,8 @@ function renderAdminCombustible() {
 
     // Buscar si el chofer tiene foto registrada
     const choferObj = (typeof choferes !== 'undefined') ? choferes.find(c => c.nombre === nombre) : null;
-    const avatarHtml = (choferObj && choferObj.foto)
-      ? `<img src="${choferObj.foto}" alt="${nombre}" class="w-11 h-11 rounded-xl object-cover border border-indigo-200 shadow-sm">`
+    const avatarHtml = (choferObj && choferObj.foto && (typeof esFotoValida !== 'function' || esFotoValida(choferObj.foto)))
+      ? `<img src="${choferObj.foto}" alt="${nombre}" class="w-11 h-11 rounded-xl object-cover border border-indigo-200 shadow-sm" onerror="this.onerror=null; this.parentElement.innerHTML='<div class=\\\'w-11 h-11 bg-indigo-50 text-indigo-600 rounded-xl flex items-center justify-center font-bold text-lg border border-indigo-100 shadow-sm\\\'><i class=\\\'fa-solid fa-user-gear\\\'></i></div>';">`
       : `<div class="w-11 h-11 bg-indigo-50 text-indigo-600 rounded-xl flex items-center justify-center font-bold text-lg border border-indigo-100 shadow-sm"><i class="fa-solid fa-user-gear"></i></div>`;
 
     return `
@@ -391,7 +391,8 @@ function renderCamiones() {
 
   container.innerHTML = filtrados.map((c) => {
     const indexOriginal = camiones.indexOf(c);
-    const bgStyle = c.foto ? `background-image: linear-gradient(to bottom, rgba(15, 23, 42, 0.7), rgba(15, 23, 42, 0.9)), url('${c.foto}'); background-size: cover; background-position: center;` : '';
+    const tieneFoto = (c.foto && (typeof esFotoValida !== 'function' || esFotoValida(c.foto)));
+    const bgStyle = tieneFoto ? `background-image: linear-gradient(to bottom, rgba(15, 23, 42, 0.7), rgba(15, 23, 42, 0.9)), url('${c.foto}'); background-size: cover; background-position: center;` : '';
     
     return `
       <div class="light-card light-card-hover rounded-2xl p-6 border border-slate-200 flex justify-between items-start relative overflow-hidden" style="${bgStyle}">
@@ -399,15 +400,15 @@ function renderCamiones() {
           <span class="px-2.5 py-0.5 rounded text-[10px] font-bold ${c.tipo === 'Grande' ? 'bg-blue-50 text-blue-700' : 'bg-purple-50 text-purple-700'} mb-2 inline-block">
             ${c.tipo === 'Grande' ? 'CAMIONES GRANDES' : 'CAMIONES PEQUEÑOS'}
           </span>
-          <h4 class="font-extrabold ${c.foto ? 'text-white' : 'text-slate-800'} text-xl">${c.matricula}</h4>
-          <p class="text-sm ${c.foto ? 'text-slate-200' : 'text-slate-600'} mb-2">${c.modelo}</p>
+          <h4 class="font-extrabold ${tieneFoto ? 'text-white' : 'text-slate-800'} text-xl">${c.matricula}</h4>
+          <p class="text-sm ${tieneFoto ? 'text-slate-200' : 'text-slate-600'} mb-2">${c.modelo}</p>
           <span class="text-xs px-2.5 py-1 rounded-lg font-bold ${c.estado && c.estado.includes('Ocupado') ? 'bg-purple-50 text-purple-700 border border-purple-200' : 'bg-emerald-50 text-emerald-700 border border-emerald-200'}">
             ${c.estado || 'Libre'}
           </span>
         </div>
         <div class="flex items-center gap-2 z-10">
-          <button onclick="abrirModalEditarCamion(${indexOriginal})" class="${c.foto ? 'text-white hover:text-blue-300' : 'text-slate-400 hover:text-blue-600'} p-2 cursor-pointer" title="Modificar vehículo"><i class="fa-solid fa-pen-to-square"></i></button>
-          <button onclick="eliminarCamion(${indexOriginal})" class="${c.foto ? 'text-white hover:text-red-300' : 'text-slate-400 hover:text-red-500'} p-2 cursor-pointer" title="Eliminar"><i class="fa-solid fa-trash-can"></i></button>
+          <button onclick="abrirModalEditarCamion(${indexOriginal})" class="${tieneFoto ? 'text-white hover:text-blue-300' : 'text-slate-400 hover:text-blue-600'} p-2 cursor-pointer" title="Modificar vehículo"><i class="fa-solid fa-pen-to-square"></i></button>
+          <button onclick="eliminarCamion(${indexOriginal})" class="${tieneFoto ? 'text-white hover:text-red-300' : 'text-slate-400 hover:text-red-500'} p-2 cursor-pointer" title="Eliminar"><i class="fa-solid fa-trash-can"></i></button>
         </div>
       </div>
     `;
@@ -442,12 +443,17 @@ window.agregarCamion = function(e) {
     return;
   }
 
+  let rawFotoCamion = inputFoto ? inputFoto.value.trim() : '';
+  if (typeof esFotoValida === 'function' && !esFotoValida(rawFotoCamion)) {
+    rawFotoCamion = '';
+  }
+
   const camionData = {
     matricula: inputMat.value.trim(),
     modelo: inputMod ? inputMod.value.trim() : 'Sin modelo',
     tipo: inputTip ? inputTip.value : 'Pequeño',
     estado: 'Libre',
-    foto: inputFoto ? inputFoto.value.trim() : ''
+    foto: rawFotoCamion
   };
 
   if (editIndex !== undefined && editIndex !== null && editIndex !== '') {
@@ -868,7 +874,9 @@ function renderChoferes() {
       <div class="light-card light-card-hover rounded-2xl p-6 border border-slate-200 flex justify-between items-start">
         <div class="flex items-center gap-4">
           <div class="w-16 h-16 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center overflow-hidden border-2 border-blue-300 shadow-inner flex-shrink-0">
-            ${ch.foto ? `<img src="${ch.foto}" class="w-full h-full object-cover" alt="${ch.nombre}">` : '<i class="fa-solid fa-user text-2xl"></i>'}
+            ${(ch.foto && (typeof esFotoValida !== 'function' || esFotoValida(ch.foto))) 
+              ? `<img src="${ch.foto}" class="w-full h-full object-cover" alt="${ch.nombre}" onerror="this.onerror=null; this.parentElement.innerHTML='<i class=\\\'fa-solid fa-user text-2xl\\\'></i>';">` 
+              : '<i class="fa-solid fa-user text-2xl"></i>'}
           </div>
           <div class="space-y-1">
             <div class="flex items-center gap-2">${badgeHtml}</div>
@@ -927,7 +935,9 @@ window.toggleModalChofer = function(show, editIndex = null) {
         document.getElementById('chofer-telefono').value = ch.telefono || '';
         document.getElementById('chofer-foto-input').value = ch.foto || '';
         if (preview) {
-          preview.innerHTML = ch.foto ? `<img src="${ch.foto}" class="w-16 h-16 object-cover rounded-full border-2 border-blue-400 mx-auto">` : '<span class="text-xs text-slate-400">Sin foto</span>';
+          preview.innerHTML = (ch.foto && (typeof esFotoValida !== 'function' || esFotoValida(ch.foto))) 
+            ? `<img src="${ch.foto}" class="w-16 h-16 object-cover rounded-full border-2 border-blue-400 mx-auto" onerror="this.onerror=null; this.parentElement.innerHTML='<span class=\\\'text-xs text-slate-400\\\'>Sin foto</span>';">` 
+            : '<span class="text-xs text-slate-400">Sin foto</span>';
         }
       }
     } else {
@@ -949,17 +959,40 @@ window.agregarChofer = function(e) {
   const inputEditIndex = document.getElementById('chofer-edit-index');
   const editIndexVal = inputEditIndex ? inputEditIndex.value : '';
 
+  let fotoVal = (document.getElementById('chofer-foto-input')?.value || '').trim();
+  // Validar y sanear la URL de la foto para evitar rutas huérfanas como /ui o /yui
+  if (typeof esFotoValida === 'function' && !esFotoValida(fotoVal)) {
+    fotoVal = '';
+  }
+
   const choferData = {
-    nombre: document.getElementById('chofer-nombre').value,
-    dni: document.getElementById('chofer-dni').value,
-    telefono: document.getElementById('chofer-telefono').value,
-    foto: document.getElementById('chofer-foto-input').value || ''
+    nombre: (document.getElementById('chofer-nombre')?.value || '').trim(),
+    dni: (document.getElementById('chofer-dni')?.value || '').trim(),
+    telefono: (document.getElementById('chofer-telefono')?.value || '').trim(),
+    foto: fotoVal
   };
 
   if (editIndexVal !== '' && !isNaN(editIndexVal)) {
     const idx = parseInt(editIndexVal, 10);
     if (idx >= 0 && idx < choferes.length) {
-      choferes[idx] = choferData; 
+      const nombreAnterior = choferes[idx].nombre;
+      const nombreNuevo = choferData.nombre;
+      choferes[idx] = choferData;
+
+      // Si se editó el nombre del conductor, propagar el cambio a todas sus rutas en memoria y en Supabase
+      if (nombreAnterior && nombreNuevo && nombreAnterior !== nombreNuevo) {
+        if (typeof rutas !== 'undefined' && Array.isArray(rutas)) {
+          rutas.forEach(r => {
+            if (r.conductor === nombreAnterior || r.chofer === nombreAnterior) {
+              r.conductor = nombreNuevo;
+              r.chofer = nombreNuevo;
+              if (r.id && typeof actualizarConductorRutaSupabase === 'function') {
+                actualizarConductorRutaSupabase(r.id, nombreNuevo);
+              }
+            }
+          });
+        }
+      }
     } else {
       choferes.push(choferData);
     }
@@ -1630,7 +1663,7 @@ window.verDetalleHistorialChofer = function(nombreChofer) {
           <div class="flex justify-between font-bold text-blue-900">
             <span>${r.dia} (${r.camion})</span>
           </div>
-          <p class="text-slate-500">Clientes: ${r.clientes ? r.clientes.join(', ') : 'Varios'}</p>
+          <p class="text-slate-500">Clientes: ${r.clientes && r.clientes.length > 0 ? r.clientes.map(c => typeof c === 'object' && c !== null ? (c.nombre || c.name || '') : c).join(', ') : 'Ninguno'}</p>
         </div>
       `).join('');
   }
@@ -1652,7 +1685,7 @@ function renderDiasSemana() {
 
   diasSemana.forEach(dia => {
     const rutasDelDia = rutas.filter(r => r.dia === dia);
-    const choferesConRuta = [...new Set(rutasDelDia.map(r => r.chofer))];
+    const choferesConRuta = [...new Set(rutasDelDia.map(r => (r.conductor || r.chofer)).filter(Boolean))];
 
     grid.innerHTML += `
       <div onclick="abrirDetalleDia('${dia}')" class="light-card light-card-hover rounded-2xl p-6 border border-slate-200 cursor-pointer flex flex-col justify-between h-48 group">
@@ -1846,7 +1879,7 @@ function renderGridChoferesAsignacion() {
                   <button onclick="eliminarRutaConductor('${diaSeleccionadoActual}', '${ch.nombre}', ${rIndex})" class="text-slate-400 hover:text-red-500 p-0.5 cursor-pointer" title="Eliminar ruta"><i class="fa-solid fa-trash-can"></i></button>
                 </div>
                 <div class="text-slate-600 space-y-0.5">
-                  ${r.clientes ? r.clientes.map((cli, cIdx) => `<div>• ${cli}</div>`).join('') : ''}
+                  ${r.clientes ? r.clientes.map((cli, cIdx) => `<div>• ${typeof cli === 'object' && cli !== null ? (cli.nombre || cli.name || '') : cli}</div>`).join('') : ''}
                 </div>
               </div>
             `).join('')}
