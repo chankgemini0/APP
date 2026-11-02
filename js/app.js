@@ -49,7 +49,11 @@ window.navFromAdminDropdown = function(tab) {
 
 // Control global de cambio de pestaña
 window.switchTab = function(tab) {
-  const secciones = ['logistica', 'rutas-semana', 'admin-clientes', 'historial', 'incidencias', 'vista-chofer', 'camiones', 'choferes', 'admin-gasolina'];
+  // Normalizar nombres históricos a nombres estándar
+  if (tab === 'choferes') tab = 'conductores';
+  if (tab === 'vista-chofer') tab = 'vista-conductor';
+
+  const secciones = ['logistica', 'rutas-semana', 'admin-clientes', 'historial', 'incidencias', 'vista-conductor', 'camiones', 'conductores', 'admin-gasolina'];
   secciones.forEach(s => {
     const el = document.getElementById(`section-${s}`);
     if (el) el.classList.add('hidden');
@@ -60,7 +64,7 @@ window.switchTab = function(tab) {
   if (secActual) secActual.classList.remove('hidden');
 
   // Restablecer estilos de las pestañas principales de la barra superior
-  const mainTabs = ['choferes', 'logistica', 'vista-chofer'];
+  const mainTabs = ['conductores', 'logistica', 'vista-conductor'];
   mainTabs.forEach(t => {
     const tabEl = document.getElementById(`tab-${t}`);
     if (tabEl) {
@@ -77,9 +81,9 @@ window.switchTab = function(tab) {
   if (tabActivo) {
     if (tab === 'logistica') {
       tabActivo.className = "flex-1 min-w-[130px] sm:min-w-[150px] py-3.5 sm:py-4 px-3 sm:px-4 rounded-xl text-sm sm:text-base font-extrabold transition-all duration-200 flex items-center justify-center gap-2 bg-blue-600 text-white shadow-lg scale-105 z-10 cursor-pointer";
-    } else if (tab === 'choferes') {
+    } else if (tab === 'conductores') {
       tabActivo.className = "flex-1 min-w-[110px] sm:min-w-[130px] py-3 px-2 sm:px-3 rounded-xl text-xs sm:text-sm font-bold transition-all duration-200 flex items-center justify-center gap-2 text-white shadow-md bg-indigo-600 cursor-pointer";
-    } else if (tab === 'vista-chofer') {
+    } else if (tab === 'vista-conductor') {
       tabActivo.className = "flex-1 min-w-[110px] sm:min-w-[130px] py-3 px-2 sm:px-3 rounded-xl text-xs sm:text-sm font-bold transition-all duration-200 flex items-center justify-center gap-2 text-white shadow-md bg-blue-600 cursor-pointer";
     }
   }
@@ -87,11 +91,20 @@ window.switchTab = function(tab) {
   if (tab === 'logistica') renderModuloLogistica();
   if (tab === 'rutas-semana') renderDiasSemana();
   if (tab === 'admin-clientes') renderClientes();
-  if (tab === 'historial') renderHistorialChoferesGrid();
+  if (tab === 'historial') {
+    if (typeof renderHistorialConductoresGrid === 'function') renderHistorialConductoresGrid();
+    else if (typeof renderHistorialChoferesGrid === 'function') renderHistorialChoferesGrid();
+  }
   if (tab === 'incidencias') renderSeccionIncidencias();
-  if (tab === 'vista-chofer') actualizarSelectPortalChoferes();
+  if (tab === 'vista-conductor') {
+    if (typeof actualizarSelectPortalConductores === 'function') actualizarSelectPortalConductores();
+    else if (typeof actualizarSelectPortalChoferes === 'function') actualizarSelectPortalChoferes();
+  }
   if (tab === 'camiones') renderCamiones();
-  if (tab === 'choferes') renderChoferes();
+  if (tab === 'conductores') {
+    if (typeof renderConductores === 'function') renderConductores();
+    else if (typeof renderChoferes === 'function') renderChoferes();
+  }
   if (tab === 'admin-gasolina') renderAdminCombustible();
 };
 
@@ -101,7 +114,11 @@ renderModuloLogistica();
 renderClientes();
 renderDiasSemana();
 renderCamiones();
-renderChoferes();
+if (typeof renderConductores === 'function') {
+  renderConductores();
+} else if (typeof renderChoferes === 'function') {
+  renderChoferes();
+}
 renderAdminCombustible();
 
 // Inicialización de Supabase y sincronización en tiempo real

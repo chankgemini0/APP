@@ -29,10 +29,10 @@
       <button onclick="drawerNavigate('logistica')" class="w-full text-left px-4 py-3 rounded-xl hover:bg-blue-600 transition-colors flex items-center gap-3 text-sm font-semibold">
         <i class="fa-solid fa-house w-5"></i> INICIO
       </button>
-      <button onclick="drawerNavigate('choferes')" class="w-full text-left px-4 py-3 rounded-xl hover:bg-indigo-600 transition-colors flex items-center gap-3 text-sm font-semibold">
+      <button onclick="drawerNavigate('conductores')" class="w-full text-left px-4 py-3 rounded-xl hover:bg-indigo-600 transition-colors flex items-center gap-3 text-sm font-semibold">
         <i class="fa-solid fa-users w-5"></i> Personal Bugamed
       </button>
-      <button onclick="drawerNavigate('vista-chofer')" class="w-full text-left px-4 py-3 rounded-xl hover:bg-blue-600 transition-colors flex items-center gap-3 text-sm font-semibold">
+      <button onclick="drawerNavigate('vista-conductor')" class="w-full text-left px-4 py-3 rounded-xl hover:bg-blue-600 transition-colors flex items-center gap-3 text-sm font-semibold">
         <i class="fa-solid fa-route w-5"></i> Resumen de Rutas
       </button>
       <button onclick="drawerNavigate('camiones')" class="w-full text-left px-4 py-3 rounded-xl hover:bg-blue-600 transition-colors flex items-center gap-3 text-sm font-semibold">
@@ -115,11 +115,11 @@
           </div>
         </button>
 
-        <button onclick="switchTab('choferes')" class="flex items-center gap-2 px-3 py-2 rounded-xl bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 transition-all cursor-pointer shadow-2xs" title="Ir a Personal">
+        <button onclick="switchTab('conductores')" class="flex items-center gap-2 px-3 py-2 rounded-xl bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 transition-all cursor-pointer shadow-2xs" title="Ir a Personal">
           <i class="fa-solid fa-id-card text-indigo-600 text-sm"></i>
           <div class="text-left hidden sm:block">
             <p class="text-[10px] font-bold uppercase text-slate-500 leading-none">Conductores</p>
-            <p id="kpi-choferes" class="text-sm font-extrabold text-indigo-950 leading-tight">0</p>
+            <p id="kpi-conductores" class="text-sm font-extrabold text-indigo-950 leading-tight">0</p>
           </div>
         </button>
 
@@ -139,7 +139,7 @@
     <!-- Navegación por Pestañas Principales (Personal Bugamed, INICIO, Resumen de Rutas) -->
     <div class="flex items-center bg-slate-200/80 p-1.5 rounded-2xl border border-slate-300 relative z-30 gap-1.5 shadow-sm">
       <!-- 1. Personal Bugamed -->
-      <button id="tab-choferes" onclick="switchTab('choferes')" class="flex-1 min-w-[110px] sm:min-w-[130px] py-3 px-2 sm:px-3 rounded-xl text-xs sm:text-sm font-bold transition-all duration-200 flex items-center justify-center gap-2 text-slate-600 hover:text-blue-700 hover:bg-white/60 cursor-pointer">
+      <button id="tab-conductores" onclick="switchTab('conductores')" class="flex-1 min-w-[110px] sm:min-w-[130px] py-3 px-2 sm:px-3 rounded-xl text-xs sm:text-sm font-bold transition-all duration-200 flex items-center justify-center gap-2 text-slate-600 hover:text-blue-700 hover:bg-white/60 cursor-pointer">
         <i class="fa-solid fa-users text-sm sm:text-base"></i>
         <span class="truncate">Personal Bugamed</span>
       </button>
@@ -151,7 +151,7 @@
       </button>
 
       <!-- 3. Resumen de Rutas -->
-      <button id="tab-vista-chofer" onclick="switchTab('vista-chofer')" class="flex-1 min-w-[110px] sm:min-w-[130px] py-3 px-2 sm:px-3 rounded-xl text-xs sm:text-sm font-bold transition-all duration-200 flex items-center justify-center gap-2 text-slate-600 hover:text-blue-700 hover:bg-white/60 cursor-pointer">
+      <button id="tab-vista-conductor" onclick="switchTab('vista-conductor')" class="flex-1 min-w-[110px] sm:min-w-[130px] py-3 px-2 sm:px-3 rounded-xl text-xs sm:text-sm font-bold transition-all duration-200 flex items-center justify-center gap-2 text-slate-600 hover:text-blue-700 hover:bg-white/60 cursor-pointer">
         <i class="fa-solid fa-route text-sm sm:text-base"></i>
         <span class="truncate">Resumen de Rutas</span>
       </button>
@@ -200,19 +200,19 @@
             <!-- SELECTOR DE CONDUCTOR CON TARJETA DE PERFIL INTERACTIVA -->
             <div>
               <label class="block text-xs font-black uppercase text-slate-700 mb-1">CONDUCTOR</label>
-              <div onclick="abrirSelectorChoferesInicio()" id="selector-chofer-card-preview" class="w-full bg-blue-50/70 border-2 border-blue-200 rounded-xl p-3 flex items-center justify-between cursor-pointer hover:border-blue-600 transition-all shadow-2xs">
+              <div onclick="abrirSelectorConductoresInicio()" id="selector-conductor-card-preview" class="w-full bg-blue-50/70 border-2 border-blue-200 rounded-xl p-3 flex items-center justify-between cursor-pointer hover:border-blue-600 transition-all shadow-2xs">
                 <div class="flex items-center gap-3">
-                  <div id="preview-chofer-img" class="w-10 h-10 rounded-full bg-blue-200 text-blue-700 flex items-center justify-center font-bold overflow-hidden border border-blue-300">
+                  <div id="preview-conductor-img" class="w-10 h-10 rounded-full bg-blue-200 text-blue-700 flex items-center justify-center font-bold overflow-hidden border border-blue-300">
                     <i class="fa-solid fa-user"></i>
                   </div>
                   <div>
-                    <p id="preview-chofer-nombre" class="text-sm font-extrabold text-slate-900">Seleccionar conductor...</p>
+                    <p id="preview-conductor-nombre" class="text-sm font-extrabold text-slate-900">Seleccionar conductor...</p>
                     <p class="text-[10px] text-slate-500 font-semibold">Haz clic para escoger</p>
                   </div>
                 </div>
                 <i class="fa-solid fa-chevron-down text-blue-600 text-xs"></i>
               </div>
-              <input type="hidden" id="fichaje-chofer-input" required>
+              <input type="hidden" id="fichaje-conductor-input" required>
             </div>
 
             <!-- SELECTOR DE VEHÍCULO CON TARJETA DE PERFIL INTERACTIVA -->
@@ -339,7 +339,7 @@
 
         <div class="space-y-3">
           <h4 class="text-xs font-black uppercase text-slate-600 tracking-wider">Conductores Disponibles (Haz clic para asignar ruta):</h4>
-          <div id="grid-choferes-asignacion" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4"></div>
+          <div id="grid-conductores-asignacion" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4"></div>
         </div>
       </div>
     </section>
@@ -380,26 +380,26 @@
       <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
           <h2 class="text-xl sm:text-2xl font-extrabold text-blue-950 flex items-center gap-2.5">
-            <i class="fa-solid fa-clock-rotate-left text-purple-600"></i> Historial de Rutas por Chofer
+            <i class="fa-solid fa-clock-rotate-left text-purple-600"></i> Historial de Rutas por Conductor
           </h2>
           <p class="text-sm text-slate-500 mt-0.5">Selecciona un conductor para consultar su actividad detallada, horas y repostajes.</p>
         </div>
       </div>
 
-      <div id="grid-choferes-historial" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5"></div>
+      <div id="grid-conductores-historial" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5"></div>
 
-      <div id="panel-detalle-historial-chofer" class="hidden light-card rounded-2xl p-6 sm:p-8 border border-purple-200 space-y-6">
+      <div id="panel-detalle-historial-conductor" class="hidden light-card rounded-2xl p-6 sm:p-8 border border-purple-200 space-y-6">
         <div class="flex justify-between items-center border-b border-slate-200 pb-5">
           <div class="flex items-center gap-4">
-            <button onclick="cerrarDetalleHistorialChofer()" class="w-10 h-10 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 flex items-center justify-center text-base transition-colors cursor-pointer">
+            <button onclick="cerrarDetalleHistorialConductor()" class="w-10 h-10 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 flex items-center justify-center text-base transition-colors cursor-pointer">
               <i class="fa-solid fa-arrow-left"></i>
             </button>
             <div>
-              <h3 id="hist-chofer-nombre" class="text-2xl font-extrabold text-blue-950">Manuel García</h3>
+              <h3 id="hist-conductor-nombre" class="text-2xl font-extrabold text-blue-950">Manuel García</h3>
               <p class="text-sm text-slate-500">Resumen integral de actividad</p>
             </div>
           </div>
-          <span id="hist-chofer-horas" class="px-4 py-1.5 bg-purple-50 text-purple-700 border border-purple-200 rounded-full text-sm font-bold">
+          <span id="hist-conductor-horas" class="px-4 py-1.5 bg-purple-50 text-purple-700 border border-purple-200 rounded-full text-sm font-bold">
             0 hrs trabajadas
           </span>
         </div>
@@ -432,7 +432,7 @@
     </section>
 
     <!-- SECCIÓN: RESUMEN DE RUTAS -->
-    <section id="section-vista-chofer" class="hidden space-y-6">
+    <section id="section-vista-conductor" class="hidden space-y-6">
       <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
           <h2 class="text-xl sm:text-2xl font-extrabold text-blue-950 flex items-center gap-2.5">
@@ -442,31 +442,31 @@
         </div>
       </div>
 
-      <!-- CUADRÍCULA (GRID) CON LAS TARJETAS DE TODOS LOS CHÓFERES -->
-      <div id="grid-choferes-rutas" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4"></div>
+      <!-- CUADRÍCULA (GRID) CON LAS TARJETAS DE TODOS LOS CONDUCTORES -->
+      <div id="grid-conductores-rutas" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4"></div>
 
-      <!-- PANEL DETALLADO DE RUTAS DEL CHÓFER POR DÍAS -->
-      <div id="panel-detalle-rutas-chofer" class="hidden light-card rounded-2xl p-6 sm:p-8 border border-indigo-200 space-y-6">
+      <!-- PANEL DETALLADO DE RUTAS DEL CONDUCTOR POR DÍAS -->
+      <div id="panel-detalle-rutas-conductor" class="hidden light-card rounded-2xl p-6 sm:p-8 border border-indigo-200 space-y-6">
         <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 border-b border-slate-200 pb-5">
           <div class="flex items-center gap-4">
-            <button onclick="cerrarDetalleRutasChofer()" class="w-10 h-10 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 flex items-center justify-center text-base transition-colors cursor-pointer" title="Volver a la cuadrícula de conductores">
+            <button onclick="cerrarDetalleRutasConductor()" class="w-10 h-10 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 flex items-center justify-center text-base transition-colors cursor-pointer" title="Volver a la cuadrícula de conductores">
               <i class="fa-solid fa-arrow-left"></i>
             </button>
-            <div id="detalle-chofer-avatar-container" class="w-12 h-12 rounded-xl bg-indigo-100 text-indigo-700 flex items-center justify-center font-bold text-lg overflow-hidden border border-indigo-200 shrink-0">
+            <div id="detalle-conductor-avatar-container" class="w-12 h-12 rounded-xl bg-indigo-100 text-indigo-700 flex items-center justify-center font-bold text-lg overflow-hidden border border-indigo-200 shrink-0">
               <i class="fa-solid fa-user"></i>
             </div>
             <div>
-              <h3 id="detalle-chofer-nombre-titulo" class="text-2xl font-extrabold text-blue-950">Nombre Conductor</h3>
-              <p id="detalle-chofer-info-subtitulo" class="text-xs sm:text-sm text-slate-500">DNI: - | Tel: -</p>
+              <h3 id="detalle-conductor-nombre-titulo" class="text-2xl font-extrabold text-blue-950">Nombre Conductor</h3>
+              <p id="detalle-conductor-info-subtitulo" class="text-xs sm:text-sm text-slate-500">DNI: - | Tel: -</p>
             </div>
           </div>
-          <span id="badge-total-rutas-chofer-semana" class="px-4 py-1.5 bg-indigo-50 text-indigo-700 border border-indigo-200 rounded-full text-xs sm:text-sm font-bold">
+          <span id="badge-total-rutas-conductor-semana" class="px-4 py-1.5 bg-indigo-50 text-indigo-700 border border-indigo-200 rounded-full text-xs sm:text-sm font-bold">
             0 Rutas Asignadas
           </span>
         </div>
 
         <!-- SELECTOR INTERACTIVO POR DÍAS DE LA SEMANA -->
-        <div id="filtro-dias-semana-chofer-container" class="flex flex-wrap gap-1.5 border-b border-slate-100 pb-4"></div>
+        <div id="filtro-dias-semana-conductor-container" class="flex flex-wrap gap-1.5 border-b border-slate-100 pb-4"></div>
 
         <div id="contenedor-desglose-rutas-por-dias" class="space-y-6"></div>
       </div>
@@ -523,8 +523,8 @@
       </div>
     </section>
 
-    <!-- SECCIÓN: CHOFERES (PERSONAL BUGAMED) -->
-    <section id="section-choferes" class="hidden space-y-6">
+    <!-- SECCIÓN: CONDUCTORES (PERSONAL BUGAMED) -->
+    <section id="section-conductores" class="hidden space-y-6">
       <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
           <h2 class="text-xl sm:text-2xl font-extrabold text-blue-950 flex items-center gap-2.5">
@@ -532,12 +532,12 @@
           </h2>
           <p class="text-sm text-slate-500 mt-0.5">Estado operativo en tiempo real y datos de contacto.</p>
         </div>
-        <button onclick="toggleModalChofer(true)" class="bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-sm sm:text-base px-5 py-3 rounded-xl shadow-md transition-all flex items-center gap-2 cursor-pointer">
+        <button onclick="toggleModalConductor(true)" class="bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-sm sm:text-base px-5 py-3 rounded-xl shadow-md transition-all flex items-center gap-2 cursor-pointer">
           <i class="fa-solid fa-plus text-lg"></i> Registrar Conductor
         </button>
       </div>
 
-      <div id="lista-choferes" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5"></div>
+      <div id="lista-conductores" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5"></div>
     </section>
 
     <!-- SECCIÓN: ADMIN REPOSTAJES -->
@@ -575,15 +575,15 @@
   </main>
 
   <!-- MODAL SELECTOR VISUAL DE CONDUCTORES -->
-  <div id="modal-selector-choferes" class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 hidden">
+  <div id="modal-selector-conductores" class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 hidden">
     <div class="light-card rounded-2xl max-w-xl w-full p-6 space-y-5 border border-blue-200 shadow-2xl">
       <div class="flex justify-between items-center border-b border-slate-100 pb-3">
         <h3 class="text-lg font-extrabold text-blue-950 flex items-center gap-2">
           <i class="fa-solid fa-user-check text-blue-600"></i> Seleccionar Conductor
         </h3>
-        <button onclick="cerrarSelectorChoferes()" class="text-slate-400 hover:text-slate-600 text-2xl cursor-pointer">&times;</button>
+        <button onclick="cerrarSelectorConductores()" class="text-slate-400 hover:text-slate-600 text-2xl cursor-pointer">&times;</button>
       </div>
-      <div id="grid-modal-choferes-perfiles" class="grid grid-cols-2 sm:grid-cols-3 gap-4 max-h-96 overflow-y-auto custom-scrollbar p-1"></div>
+      <div id="grid-modal-conductores-perfiles" class="grid grid-cols-2 sm:grid-cols-3 gap-4 max-h-96 overflow-y-auto custom-scrollbar p-1"></div>
     </div>
   </div>
 
@@ -618,7 +618,7 @@
         <div class="flex items-center gap-2">
           <i class="fa-solid fa-id-card text-blue-600 text-sm"></i>
           <span class="text-slate-600">Conductor:</span>
-          <strong id="modal-inicio-chofer-badge" class="text-blue-950 font-extrabold">-</strong>
+          <strong id="modal-inicio-conductor-badge" class="text-blue-950 font-extrabold">-</strong>
         </div>
         <div class="flex items-center gap-2">
           <i class="fa-solid fa-truck text-indigo-600 text-sm"></i>
@@ -669,7 +669,7 @@
           <div class="flex items-center gap-2 sm:gap-3 flex-wrap">
             <h3 id="modal-asignar-titulo" class="text-base sm:text-xl font-extrabold text-blue-950 flex items-center gap-2 flex-wrap">
               <i class="fa-solid fa-route text-blue-600"></i>
-              <span>Asignar Ruta a <span id="modal-asignar-chofer-nombre">-</span></span>
+              <span>Asignar Ruta a <span id="modal-asignar-conductor-nombre">-</span></span>
               <span class="text-blue-600 font-extrabold">(<span id="modal-asignar-dia-nombre" class="transition-transform duration-150 inline-block">-</span>)</span>
             </h3>
 
@@ -779,7 +779,7 @@
         <button onclick="toggleModalCierreFinal(false)" class="text-slate-400 hover:text-slate-600 text-2xl cursor-pointer">&times;</button>
       </div>
       <form onsubmit="confirmarCierreRutaDefinitivo(event)" class="space-y-4">
-        <input type="hidden" id="cierre-chofer-target" value="">
+        <input type="hidden" id="cierre-conductor-target" value="">
         <input type="hidden" id="cierre-ruta-id" value="">
         <div>
           <label class="block text-xs font-bold text-slate-600 mb-1">Km Finales del Vehículo <span class="text-purple-600 font-normal">(Opcional)</span></label>
@@ -807,17 +807,17 @@
         <button onclick="toggleModalRepostaje(false)" class="text-slate-400 hover:text-slate-600 text-2xl cursor-pointer">&times;</button>
       </div>
       <form onsubmit="guardarRepostaje(event)" class="space-y-4">
-        <div id="dropdown-chofer-container" class="relative">
-          <label class="block text-xs font-bold uppercase text-slate-600 mb-1">Conductor / Chófer</label>
-          <input type="hidden" id="rep-chofer">
+        <div id="dropdown-conductor-container" class="relative">
+          <label class="block text-xs font-bold uppercase text-slate-600 mb-1">Conductor</label>
+          <input type="hidden" id="rep-conductor">
 
-          <button type="button" id="btn-rep-chofer" onclick="toggleDropdownChoferes()" class="w-full bg-slate-50 hover:bg-slate-100 border border-slate-300 rounded-xl p-2.5 text-sm text-slate-800 flex justify-between items-center cursor-pointer transition-all focus:outline-none focus:border-indigo-500">
-            <span id="text-rep-chofer" class="text-slate-500">Seleccionar conductor...</span>
+          <button type="button" id="btn-rep-conductor" onclick="toggleDropdownConductores()" class="w-full bg-slate-50 hover:bg-slate-100 border border-slate-300 rounded-xl p-2.5 text-sm text-slate-800 flex justify-between items-center cursor-pointer transition-all focus:outline-none focus:border-indigo-500">
+            <span id="text-rep-conductor" class="text-slate-500">Seleccionar conductor...</span>
             <i class="fa-solid fa-chevron-down text-slate-400 text-xs"></i>
           </button>
 
-          <div id="menu-dropdown-chofer" class="absolute z-50 w-full mt-1.5 bg-white border border-slate-200 rounded-xl shadow-xl hidden overflow-hidden">
-            <ul id="lista-opciones-choferes" class="max-h-48 overflow-y-auto divide-y divide-slate-100 custom-scrollbar"></ul>
+          <div id="menu-dropdown-conductor" class="absolute z-50 w-full mt-1.5 bg-white border border-slate-200 rounded-xl shadow-xl hidden overflow-hidden">
+            <ul id="lista-opciones-conductores" class="max-h-48 overflow-y-auto divide-y divide-slate-100 custom-scrollbar"></ul>
           </div>
         </div>
 
@@ -947,7 +947,7 @@
             <span class="flex items-center gap-1.5">
               <i class="fa-solid fa-map-location-dot text-purple-600"></i> Ubicación Google Maps (Navegación GPS)
             </span>
-            <span class="text-[10px] text-purple-700 font-bold bg-purple-100 px-2 py-0.5 rounded">Para chóferes</span>
+            <span class="text-[10px] text-purple-700 font-bold bg-purple-100 px-2 py-0.5 rounded">Para conductores</span>
           </label>
           <input type="text" id="cli-ubicacion" placeholder="Pega enlace de Google Maps o coordenadas (Ej: 41.1189, 1.2445)" class="w-full bg-white border border-purple-300 rounded-xl px-3.5 py-2.5 text-xs text-slate-800 focus:outline-none focus:border-purple-600 shadow-2xs font-mono">
           
@@ -963,7 +963,7 @@
             </button>
           </div>
           <p class="text-[10px] text-slate-500">
-            Asegura que el chófer pueda abrir Google Maps en tiempo real directamente hasta la puerta del cliente con un solo clic.
+            Asegura que el conductor pueda abrir Google Maps en tiempo real directamente hasta la puerta del cliente con un solo clic.
           </p>
         </div>
 
@@ -1015,38 +1015,38 @@
     </div>
   </div>
 
-  <!-- MODAL CHOFER -->
-  <div id="modal-chofer" class="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 flex items-center justify-center p-4 hidden">
+  <!-- MODAL CONDUCTOR -->
+  <div id="modal-conductor" class="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 flex items-center justify-center p-4 hidden">
     <div class="light-card rounded-2xl max-w-md w-full p-6 sm:p-8 space-y-6 border border-indigo-200 shadow-xl">
       <div class="flex justify-between items-center border-b border-slate-100 pb-4">
         <h3 class="text-lg font-bold text-slate-800 flex items-center gap-2">
           <i class="fa-solid fa-user-plus text-indigo-600"></i> Registrar Conductor
         </h3>
-        <button onclick="toggleModalChofer(false)" class="text-slate-400 hover:text-slate-600 text-2xl cursor-pointer">&times;</button>
+        <button onclick="toggleModalConductor(false)" class="text-slate-400 hover:text-slate-600 text-2xl cursor-pointer">&times;</button>
       </div>
 
-      <form id="form-chofer" onsubmit="agregarChofer(event)" class="space-y-4">
-        <input type="hidden" id="chofer-edit-index" value="">
+      <form id="form-conductor" onsubmit="agregarConductor(event)" class="space-y-4">
+        <input type="hidden" id="conductor-edit-index" value="">
         <div>
           <label class="block text-xs font-bold uppercase text-slate-500 mb-1.5">Nombre Completo</label>
-          <input type="text" id="chofer-nombre" required placeholder="Ej: Manuel García" class="w-full bg-slate-50 border border-slate-300 rounded-xl px-3.5 py-2.5 text-sm text-slate-800 focus:border-indigo-500">
+          <input type="text" id="conductor-nombre" required placeholder="Ej: Manuel García" class="w-full bg-slate-50 border border-slate-300 rounded-xl px-3.5 py-2.5 text-sm text-slate-800 focus:border-indigo-500">
         </div>
         <div>
           <label class="block text-xs font-bold uppercase text-slate-500 mb-1.5">DNI / NIE</label>
-          <input type="text" id="chofer-dni" required placeholder="Ej: 12345678X" class="w-full bg-slate-50 border border-slate-300 rounded-xl px-3.5 py-2.5 text-sm text-slate-800 focus:border-indigo-500">
+          <input type="text" id="conductor-dni" required placeholder="Ej: 12345678X" class="w-full bg-slate-50 border border-slate-300 rounded-xl px-3.5 py-2.5 text-sm text-slate-800 focus:border-indigo-500">
         </div>
         <div>
           <label class="block text-xs font-bold uppercase text-slate-500 mb-1.5">Teléfono Móvil</label>
-          <input type="tel" id="chofer-telefono" required placeholder="Ej: +34 600 000 000" class="w-full bg-slate-50 border border-slate-300 rounded-xl px-3.5 py-2.5 text-sm text-slate-800 focus:border-indigo-500">
+          <input type="tel" id="conductor-telefono" required placeholder="Ej: +34 600 000 000" class="w-full bg-slate-50 border border-slate-300 rounded-xl px-3.5 py-2.5 text-sm text-slate-800 focus:border-indigo-500">
         </div>
         <div>
           <label class="block text-xs font-bold uppercase text-slate-500 mb-1.5">Foto de Perfil (URL o Ruta)</label>
-          <input type="text" id="chofer-foto-input" placeholder="Ej: antonio.jpg o URL de imagen" class="w-full bg-slate-50 border border-slate-300 rounded-xl px-3.5 py-2.5 text-sm text-slate-800 focus:border-indigo-500">
+          <input type="text" id="conductor-foto-input" placeholder="Ej: antonio.jpg o URL de imagen" class="w-full bg-slate-50 border border-slate-300 rounded-xl px-3.5 py-2.5 text-sm text-slate-800 focus:border-indigo-500">
         </div>
-        <div id="preview-chofer-subida"></div>
+        <div id="preview-conductor-subida"></div>
 
         <div class="flex justify-end gap-3 pt-2">
-          <button type="button" onclick="toggleModalChofer(false)" class="px-5 py-2.5 bg-slate-100 text-slate-600 text-sm rounded-xl font-bold hover:bg-slate-200 cursor-pointer">Cancelar</button>
+          <button type="button" onclick="toggleModalConductor(false)" class="px-5 py-2.5 bg-slate-100 text-slate-600 text-sm rounded-xl font-bold hover:bg-slate-200 cursor-pointer">Cancelar</button>
           <button type="submit" class="px-6 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white text-sm rounded-xl font-bold shadow-md cursor-pointer">Guardar Conductor</button>
         </div>
       </form>

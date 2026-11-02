@@ -20,7 +20,7 @@ function esFotoValida(url) {
 }
 window.esFotoValida = esFotoValida;
 
-function sanitizarChoferesStorage(lista) {
+function sanitizarConductoresStorage(lista) {
   if (!Array.isArray(lista)) return lista;
   let modificado = false;
   const limpia = lista.map(ch => {
@@ -32,13 +32,16 @@ function sanitizarChoferesStorage(lista) {
   });
   if (modificado) {
     try {
+      localStorage.setItem('bugamed_conductores', JSON.stringify(limpia));
       localStorage.setItem('bugamed_choferes', JSON.stringify(limpia));
     } catch (e) {
-      console.warn('Error al guardar choferes saneados:', e);
+      console.warn('Error al guardar conductores saneados:', e);
     }
   }
   return limpia;
 }
+window.sanitizarConductoresStorage = sanitizarConductoresStorage;
+window.sanitizarChoferesStorage = sanitizarConductoresStorage;
 
 // Variables Globales de Datos
 let camiones = cargarStorage('bugamed_camiones', [
@@ -46,10 +49,13 @@ let camiones = cargarStorage('bugamed_camiones', [
   { matricula: '8912-MBN', modelo: 'Iveco Stralis 360 E6', tipo: 'Grande', estado: 'Libre', foto: '' }
 ]);
 
-let choferes = sanitizarChoferesStorage(cargarStorage('bugamed_choferes', [
+let conductores = sanitizarConductoresStorage(cargarStorage('bugamed_conductores', cargarStorage('bugamed_choferes', [
   { nombre: 'Antonio Fernández', dni: '44556677A', telefono: '+34 612 987 654', foto: '' },
   { nombre: 'David Morales', dni: '88776655B', telefono: '+34 655 443 322', foto: '' }
-]));
+])));
+let choferes = conductores;
+window.conductores = conductores;
+window.choferes = conductores;
 
 let clientes = cargarStorage('bugamed_clientes', [
   { nombre: 'Hotel Meliá Palma', zona: 'Tarragona', tipo: 'Hoteles', direccion: 'Passeig Marítim 12', telefono: '+34 971 111 222', ubicacion: 'https://www.google.com/maps/search/?api=1&query=Hotel+Melia+Palma+Passeig+Maritim+12+Tarragona' },
@@ -59,9 +65,9 @@ let clientes = cargarStorage('bugamed_clientes', [
 ]);
 
 let rutas = cargarStorage('bugamed_rutas', [
-  { id: 'ruta_init_1', dia: 'Lunes', tipoCliente: 'Hoteles', chofer: 'Antonio Fernández', conductor: 'Antonio Fernández', camion: '8912-MBN', vehiculo: '8912-MBN', clientes: ['Hotel Meliá Palma', 'Hotel Salou Sun'], estado: 'pendiente' },
-  { id: 'ruta_init_2', dia: 'Lunes', tipoCliente: 'Restaurantes', chofer: 'Antonio Fernández', conductor: 'Antonio Fernández', camion: '8912-MBN', vehiculo: '8912-MBN', clientes: ['Restaurante Cambrils Port'], estado: 'pendiente' },
-  { id: 'ruta_init_3', dia: 'Martes', tipoCliente: 'Restaurantes', chofer: 'David Morales', conductor: 'David Morales', camion: '4589-KLL', vehiculo: '4589-KLL', clientes: ['Restaurante Cambrils Port'], estado: 'pendiente' }
+  { id: 'ruta_init_1', dia: 'Lunes', tipoCliente: 'Hoteles', conductor: 'Antonio Fernández', chofer: 'Antonio Fernández', camion: '8912-MBN', vehiculo: '8912-MBN', clientes: ['Hotel Meliá Palma', 'Hotel Salou Sun'], estado: 'pendiente' },
+  { id: 'ruta_init_2', dia: 'Lunes', tipoCliente: 'Restaurantes', conductor: 'Antonio Fernández', chofer: 'Antonio Fernández', camion: '8912-MBN', vehiculo: '8912-MBN', clientes: ['Restaurante Cambrils Port'], estado: 'pendiente' },
+  { id: 'ruta_init_3', dia: 'Martes', tipoCliente: 'Restaurantes', conductor: 'David Morales', chofer: 'David Morales', camion: '4589-KLL', vehiculo: '4589-KLL', clientes: ['Restaurante Cambrils Port'], estado: 'pendiente' }
 ]);
 window.rutas = rutas;
 
@@ -91,9 +97,15 @@ function asegurarEstadoRutas() {
 asegurarEstadoRutas();
 
 let repostajes = cargarStorage('bugamed_repostajes', [
-  { fecha: '2026-10-24', tipo: 'Gasoil', litros: '65', euros: '102.50', camion: '8912-MBN', chofer: 'Antonio Fernández' },
-  { fecha: '2026-10-25', tipo: 'Gasoil', litros: '40', euros: '64.00', camion: '4589-KLL', chofer: 'David Morales' }
+  { fecha: '2026-10-24', tipo: 'Gasoil', litros: '65', euros: '102.50', camion: '8912-MBN', conductor: 'Antonio Fernández', chofer: 'Antonio Fernández' },
+  { fecha: '2026-10-25', tipo: 'Gasoil', litros: '40', euros: '64.00', camion: '4589-KLL', conductor: 'David Morales', chofer: 'David Morales' }
 ]);
+if (Array.isArray(repostajes)) {
+  repostajes.forEach(r => {
+    if (!r.conductor && r.chofer) r.conductor = r.chofer;
+    if (!r.chofer && r.conductor) r.chofer = r.conductor;
+  });
+}
 window.repostajes = repostajes;
 
 let incidencias = cargarStorage('bugamed_incidencias', [
@@ -106,6 +118,7 @@ const demoHistorialInicial = [
     id: 'hist_demo_1',
     fecha: '2026-11-02',
     dia: 'Lunes',
+    conductor: 'Antonio Fernández',
     chofer: 'Antonio Fernández',
     camion: '8912-MBN',
     rutaNombre: 'Ruta Matutina Hoteles',
@@ -123,6 +136,7 @@ const demoHistorialInicial = [
     id: 'hist_demo_2',
     fecha: '2026-11-01',
     dia: 'Domingo',
+    conductor: 'Antonio Fernández',
     chofer: 'Antonio Fernández',
     camion: '8912-MBN',
     rutaNombre: 'Ruta Especial Costa',
@@ -140,6 +154,7 @@ const demoHistorialInicial = [
     id: 'hist_demo_3',
     fecha: '2026-10-28',
     dia: 'Miércoles',
+    conductor: 'Antonio Fernández',
     chofer: 'Antonio Fernández',
     camion: '8912-MBN',
     rutaNombre: 'Ruta Tarragona Central',
@@ -157,6 +172,7 @@ const demoHistorialInicial = [
     id: 'hist_demo_4',
     fecha: '2026-10-21',
     dia: 'Miércoles',
+    conductor: 'Antonio Fernández',
     chofer: 'Antonio Fernández',
     camion: '8912-MBN',
     rutaNombre: 'Ruta Playas y Restaurantes',
@@ -173,6 +189,7 @@ const demoHistorialInicial = [
     id: 'hist_demo_5',
     fecha: '2026-10-14',
     dia: 'Miércoles',
+    conductor: 'Antonio Fernández',
     chofer: 'Antonio Fernández',
     camion: '8912-MBN',
     rutaNombre: 'Ruta Salou - Cambrils',
@@ -190,6 +207,7 @@ const demoHistorialInicial = [
     id: 'hist_demo_6',
     fecha: '2026-09-30',
     dia: 'Miércoles',
+    conductor: 'Antonio Fernández',
     chofer: 'Antonio Fernández',
     camion: '8912-MBN',
     rutaNombre: 'Ruta Cierre Septiembre',
@@ -207,6 +225,7 @@ const demoHistorialInicial = [
     id: 'hist_demo_7',
     fecha: '2026-11-02',
     dia: 'Lunes',
+    conductor: 'David Morales',
     chofer: 'David Morales',
     camion: '4589-KLL',
     rutaNombre: 'Ruta Restaurantes y Campings',
@@ -225,6 +244,7 @@ const demoHistorialInicial = [
     id: 'hist_demo_8',
     fecha: '2026-10-29',
     dia: 'Jueves',
+    conductor: 'David Morales',
     chofer: 'David Morales',
     camion: '4589-KLL',
     rutaNombre: 'Ruta Costa Sur',
@@ -243,11 +263,13 @@ let historialFinalizadas = cargarStorage('bugamed_historial_finalizadas', demoHi
 if (!historialFinalizadas || !Array.isArray(historialFinalizadas) || historialFinalizadas.length === 0) {
   historialFinalizadas = demoHistorialInicial;
 }
-// Asegurar IDs únicos para cada ruta finalizada
+// Asegurar IDs únicos y propiedad conductor unificada para cada ruta finalizada
 historialFinalizadas.forEach((r, idx) => {
   if (!r.id) {
     r.id = 'hist_' + (Date.now() + idx) + '_' + Math.random().toString(36).substr(2, 6);
   }
+  if (!r.conductor && r.chofer) r.conductor = r.chofer;
+  if (!r.chofer && r.conductor) r.chofer = r.conductor;
 });
 let serviciosActivos = cargarStorage('bugamed_servicios_activos', {});
 let envasesPorClienteRuta = cargarStorage('bugamed_envases_registrados', {});
@@ -256,19 +278,24 @@ let diaActual = 'Lunes';
 let diaSeleccionadoActual = null;
 let diaActualModal = 'Lunes';
 let modalAsignacionTemporal = null;
+let conductorSeleccionadoAsignacion = null;
 let choferSeleccionadoAsignacion = null;
 let clientesManualesTempRapido = [];
 let filtroClienteActual = 'Todos';
 let filtroCamionActual = 'Todos';
 let filtroIncidenciasTab = 'curso'; 
+let conductorAcordeonAbierto = null; 
 let choferAcordeonAbierto = null; 
 const diasSemana = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado', 'Domingo'];
 
 function guardarDatosEnLocal() {
   window.rutas = rutas;
   window.repostajes = repostajes;
+  window.conductores = conductores;
+  window.choferes = conductores;
   localStorage.setItem('bugamed_camiones', JSON.stringify(camiones));
-  localStorage.setItem('bugamed_choferes', JSON.stringify(choferes));
+  localStorage.setItem('bugamed_conductores', JSON.stringify(conductores));
+  localStorage.setItem('bugamed_choferes', JSON.stringify(conductores));
   localStorage.setItem('bugamed_clientes', JSON.stringify(clientes));
   localStorage.setItem('bugamed_rutas', JSON.stringify(rutas));
   localStorage.setItem('bugamed_repostajes', JSON.stringify(repostajes));
@@ -291,7 +318,7 @@ function registrarRutaEnHistorial(ruta, metadatos = {}) {
   const horaInicio = metadatos.horaInicio || ruta.horaInicio || '08:00';
   const km = metadatos.km || ruta.km || 'No especificado';
   const obs = metadatos.obs || ruta.obs || 'Ruta finalizada';
-  const chofer = ruta.chofer || ruta.conductor || metadatos.chofer || 'Sin conductor';
+  const conductor = (ruta.conductor || ruta.chofer || metadatos.conductor || metadatos.chofer || 'Sin conductor').trim();
   const camion = ruta.camion || ruta.vehiculo || metadatos.camion || 'Sin camión';
   const dia = ruta.dia || metadatos.dia || 'General';
 
@@ -314,7 +341,8 @@ function registrarRutaEnHistorial(ruta, metadatos = {}) {
     id: idRuta,
     fecha: fechaHoy,
     dia: dia,
-    chofer: chofer,
+    conductor: conductor,
+    chofer: conductor,
     camion: camion,
     rutaNombre: rutaNombre,
     km: km,
@@ -374,7 +402,7 @@ async function finalizarRuta(rutaId, metadatos = {}) {
     return null;
   }
 
-  const choferNombre = ruta.chofer || ruta.conductor;
+  const conductorNombre = (ruta.conductor || ruta.chofer || '').trim();
   const camionMat = ruta.camion || ruta.vehiculo;
 
   // 1. Registrar en Historial y marcar como finalizada
@@ -387,10 +415,13 @@ async function finalizarRuta(rutaId, metadatos = {}) {
   }
 
   // 3. Liberar servicio activo si estaba en curso
-  if (typeof serviciosActivos !== 'undefined' && choferNombre && serviciosActivos[choferNombre]) {
-    delete serviciosActivos[choferNombre];
+  if (typeof serviciosActivos !== 'undefined' && conductorNombre && serviciosActivos[conductorNombre]) {
+    delete serviciosActivos[conductorNombre];
   }
-  if (typeof choferAcordeonAbierto !== 'undefined' && choferAcordeonAbierto === choferNombre) {
+  if (typeof conductorAcordeonAbierto !== 'undefined' && conductorAcordeonAbierto === conductorNombre) {
+    conductorAcordeonAbierto = null;
+  }
+  if (typeof choferAcordeonAbierto !== 'undefined' && choferAcordeonAbierto === conductorNombre) {
     choferAcordeonAbierto = null;
   }
 
@@ -398,7 +429,7 @@ async function finalizarRuta(rutaId, metadatos = {}) {
   if (typeof envasesPorClienteRuta !== 'undefined' && ruta.clientes) {
     ruta.clientes.forEach(cli => {
       const cNombre = typeof cli === 'object' && cli !== null ? (cli.nombre || cli.name || '') : String(cli);
-      const key = `${choferNombre}_${cNombre}`;
+      const key = `${conductorNombre}_${cNombre}`;
       delete envasesPorClienteRuta[key];
     });
   }
@@ -422,13 +453,20 @@ async function finalizarRuta(rutaId, metadatos = {}) {
     refrescarVistasRutas();
   } else {
     if (typeof renderDiasSemana === 'function') renderDiasSemana();
-    if (typeof renderGridChoferesAsignacion === 'function') renderGridChoferesAsignacion();
-    if (typeof renderHistorialChoferesGrid === 'function') renderHistorialChoferesGrid();
+    if (typeof renderGridConductoresAsignacion === 'function') renderGridConductoresAsignacion();
+    else if (typeof renderGridChoferesAsignacion === 'function') renderGridChoferesAsignacion();
+    if (typeof renderHistorialConductoresGrid === 'function') renderHistorialConductoresGrid();
+    else if (typeof renderHistorialChoferesGrid === 'function') renderHistorialChoferesGrid();
   }
 
-  // 8. Si el detalle del historial de este chofer está abierto, actualizarlo
-  if (typeof verDetalleHistorialChofer === 'function' && window.choferSeleccionadoActual === choferNombre) {
-    verDetalleHistorialChofer(choferNombre);
+  // 8. Si el detalle del historial de este conductor está abierto, actualizarlo
+  const conductorActual = window.conductorSeleccionadoActual || window.choferSeleccionadoActual;
+  if (conductorActual === conductorNombre) {
+    if (typeof verDetalleHistorialConductor === 'function') {
+      verDetalleHistorialConductor(conductorNombre);
+    } else if (typeof verDetalleHistorialChofer === 'function') {
+      verDetalleHistorialChofer(conductorNombre);
+    }
   }
 
   return entradaHistorial;
@@ -441,11 +479,11 @@ window.historialFinalizadas = historialFinalizadas;
 
 function actualizarKPIs() {
   const elCam = document.getElementById('kpi-camiones');
-  const elChof = document.getElementById('kpi-choferes');
+  const elCond = document.getElementById('kpi-conductores') || document.getElementById('kpi-choferes');
   const elInc = document.getElementById('kpi-incidencias');
 
   if (elCam) elCam.innerText = camiones.length;
-  if (elChof) elChof.innerText = choferes.length;
+  if (elCond) elCond.innerText = conductores.length;
   if (elInc) {
     const enCursoCount = incidencias.filter(i => !i.resuelto).length;
     elInc.innerText = enCursoCount;

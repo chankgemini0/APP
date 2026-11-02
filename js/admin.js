@@ -5,20 +5,24 @@ window.toggleModalRepostaje = function(show) {
     if (show) {
       // 1. Asegurar que las opciones de conductores y camiones estén pobladas en los menús
       const listaOpcionesCamiones = document.getElementById('lista-opciones-camiones');
-      const listaOpcionesChoferes = document.getElementById('lista-opciones-choferes');
+      const listaOpcionesConductores = document.getElementById('lista-opciones-conductores') || document.getElementById('lista-opciones-choferes');
       if (((listaOpcionesCamiones && (!listaOpcionesCamiones.children || listaOpcionesCamiones.children.length === 0)) ||
-           (listaOpcionesChoferes && (!listaOpcionesChoferes.children || listaOpcionesChoferes.children.length === 0))) && typeof renderModuloLogistica === 'function') {
+           (listaOpcionesConductores && (!listaOpcionesConductores.children || listaOpcionesConductores.children.length === 0))) && typeof renderModuloLogistica === 'function') {
         renderModuloLogistica();
       }
 
       // 2. Preselección inteligente: si ya hay un conductor o camión activo en pantalla, preseleccionarlo
-      const inputFichajeChofer = document.getElementById('fichaje-chofer-input');
+      const inputFichajeConductor = document.getElementById('fichaje-conductor-input') || document.getElementById('fichaje-chofer-input');
       const inputFichajeCamion = document.getElementById('fichaje-camion-input');
-      const inputRepChofer = document.getElementById('rep-chofer');
+      const inputRepConductor = document.getElementById('rep-conductor') || document.getElementById('rep-chofer');
       const inputRepCamion = document.getElementById('rep-camion');
 
-      if (inputFichajeChofer && inputFichajeChofer.value && (!inputRepChofer || !inputRepChofer.value) && typeof seleccionarChoferRepostaje === 'function') {
-        seleccionarChoferRepostaje(inputFichajeChofer.value);
+      if (inputFichajeConductor && inputFichajeConductor.value && (!inputRepConductor || !inputRepConductor.value)) {
+        if (typeof seleccionarConductorRepostaje === 'function') {
+          seleccionarConductorRepostaje(inputFichajeConductor.value);
+        } else if (typeof seleccionarChoferRepostaje === 'function') {
+          seleccionarChoferRepostaje(inputFichajeConductor.value);
+        }
       }
       if (inputFichajeCamion && inputFichajeCamion.value && (!inputRepCamion || !inputRepCamion.value) && typeof seleccionarCamionRepostaje === 'function') {
         seleccionarCamionRepostaje(inputFichajeCamion.value);
@@ -26,8 +30,8 @@ window.toggleModalRepostaje = function(show) {
     } else {
       const menuCam = document.getElementById('menu-dropdown-camion');
       if (menuCam) menuCam.classList.add('hidden');
-      const menuChofer = document.getElementById('menu-dropdown-chofer');
-      if (menuChofer) menuChofer.classList.add('hidden');
+      const menuConductor = document.getElementById('menu-dropdown-conductor') || document.getElementById('menu-dropdown-chofer');
+      if (menuConductor) menuConductor.classList.add('hidden');
     }
     m.classList.toggle('hidden', !show); 
   }
@@ -36,8 +40,11 @@ window.toggleModalRepostaje = function(show) {
 window.guardarRepostaje = async function(e) {
   if (e) e.preventDefault();
 
-  const inputChofer = document.getElementById('rep-chofer');
-  const chofer = (inputChofer && inputChofer.value && inputChofer.value.trim()) ? inputChofer.value.trim() : 'General';
+  const inputConductor = document.getElementById('rep-conductor') || document.getElementById('rep-chofer');
+  const inputFichaje = document.getElementById('fichaje-conductor-input') || document.getElementById('fichaje-chofer-input');
+  const conductor = (inputConductor && inputConductor.value && inputConductor.value.trim()) 
+    ? inputConductor.value.trim() 
+    : (inputFichaje?.value?.trim() || 'General');
   const camion = document.getElementById('rep-camion')?.value?.trim() || '';
   const litros = document.getElementById('rep-litros')?.value?.trim() || '';
   const euros = document.getElementById('rep-euros')?.value?.trim() || '';
@@ -69,7 +76,8 @@ window.guardarRepostaje = async function(e) {
     const datosRepostaje = {
       fecha: new Date().toISOString().split('T')[0],
       camion: camion,
-      chofer: chofer,
+      conductor: conductor,
+      chofer: conductor,
       litros: litros,
       euros: euros,
       km: km,
@@ -111,19 +119,19 @@ window.guardarRepostaje = async function(e) {
     const menuCam = document.getElementById('menu-dropdown-camion');
     if (menuCam) menuCam.classList.add('hidden');
 
-    const inputChoferElem = document.getElementById('rep-chofer');
-    if (inputChoferElem) inputChoferElem.value = '';
-    const textRepChofer = document.getElementById('text-rep-chofer');
-    if (textRepChofer) {
-      textRepChofer.textContent = 'Seleccionar conductor...';
-      textRepChofer.classList.remove('font-bold', 'text-indigo-950');
-      textRepChofer.classList.add('text-slate-500');
+    const inputCondElem = document.getElementById('rep-conductor') || document.getElementById('rep-chofer');
+    if (inputCondElem) inputCondElem.value = '';
+    const textRepCond = document.getElementById('text-rep-conductor') || document.getElementById('text-rep-chofer');
+    if (textRepCond) {
+      textRepCond.textContent = 'Seleccionar conductor...';
+      textRepCond.classList.remove('font-bold', 'text-indigo-950');
+      textRepCond.classList.add('text-slate-500');
     }
-    const menuChofer = document.getElementById('menu-dropdown-chofer');
-    if (menuChofer) menuChofer.classList.add('hidden');
+    const menuCond = document.getElementById('menu-dropdown-conductor') || document.getElementById('menu-dropdown-chofer');
+    if (menuCond) menuCond.classList.add('hidden');
 
     if (typeof mostrarToastLogistica === 'function') {
-      mostrarToastLogistica(`✓ Repostaje de ${camion} registrado exitosamente`);
+      mostrarToastLogistica(`¡Repostaje de ${conductor} registrado con éxito!`);
     }
   } catch (err) {
     console.error('Error al guardar repostaje:', err);
@@ -148,7 +156,7 @@ function renderRepostajes() {
     <div class="bg-slate-50 p-3 rounded-xl border border-slate-200 flex justify-between items-center text-xs">
       <div>
         <p class="font-bold text-slate-800"><i class="fa-solid fa-gas-pump text-indigo-600"></i> ${r.tipo ? `${r.tipo} - ` : ''}${r.camion}</p>
-        <p class="text-slate-500">${r.fecha} | ${r.litros} L${r.km ? ` | ${r.km} KM` : ''} | <span class="font-semibold text-slate-700">${r.chofer || 'General'}</span></p>
+        <p class="text-slate-500">${r.fecha} | ${r.litros} L${r.km ? ` | ${r.km} KM` : ''} | <span class="font-semibold text-slate-700">${r.conductor || r.chofer || 'General'}</span></p>
       </div>
       <div class="flex items-center gap-3">
         <span class="font-bold text-indigo-700 text-sm">${r.euros} €</span>
@@ -282,21 +290,21 @@ function renderAdminCombustible() {
   // Mapeamos con índice original para poder gestionar/eliminar si fuese necesario
   const repostajesConIndex = listaRepostajes.map((r, idx) => ({ ...r, originalIndex: idx }));
 
-  // 1. Filtrado por texto (chofer o camión) y por filtro temporal activo
+  // 1. Filtrado por texto (conductor o camión) y por filtro temporal activo
   const filtrados = repostajesConIndex.filter(r => {
-    const chofer = (r.chofer || 'General').toLowerCase();
+    const conductor = (r.conductor || r.chofer || 'General').toLowerCase();
     const camion = (r.camion || '').toLowerCase();
-    const coincideTexto = !textoBusqueda || chofer.includes(textoBusqueda) || camion.includes(textoBusqueda);
+    const coincideTexto = !textoBusqueda || conductor.includes(textoBusqueda) || camion.includes(textoBusqueda);
     const coincideTiempo = cumpleFiltroTiempoCombustible(r.fecha, filtroTiempoCombustible);
     return coincideTexto && coincideTiempo;
   });
 
   // 2. Agrupación por conductor
-  const resumenPorChofer = {};
+  const resumenPorConductor = {};
   filtrados.forEach(r => {
-    const choferNombre = (r.chofer && r.chofer.trim()) ? r.chofer.trim() : 'General';
-    if (!resumenPorChofer[choferNombre]) {
-      resumenPorChofer[choferNombre] = {
+    const conductorNombre = (r.conductor && r.conductor.trim()) ? r.conductor.trim() : ((r.chofer && r.chofer.trim()) ? r.chofer.trim() : 'General');
+    if (!resumenPorConductor[conductorNombre]) {
+      resumenPorConductor[conductorNombre] = {
         litros: 0,
         euros: 0,
         tickets: 0,
@@ -305,13 +313,13 @@ function renderAdminCombustible() {
     }
     const l = parseFloat(r.litros || 0) || 0;
     const e = parseFloat(r.euros || 0) || 0;
-    resumenPorChofer[choferNombre].litros += l;
-    resumenPorChofer[choferNombre].euros += e;
-    resumenPorChofer[choferNombre].tickets += 1;
-    resumenPorChofer[choferNombre].items.push(r);
+    resumenPorConductor[conductorNombre].litros += l;
+    resumenPorConductor[conductorNombre].euros += e;
+    resumenPorConductor[conductorNombre].tickets += 1;
+    resumenPorConductor[conductorNombre].items.push(r);
   });
 
-  const conductores = Object.keys(resumenPorChofer);
+  const conductores = Object.keys(resumenPorConductor);
 
   // Si no hay datos tras aplicar los filtros
   if (conductores.length === 0) {
@@ -335,14 +343,15 @@ function renderAdminCombustible() {
 
   // 3. Renderizado de tarjetas visualmente atractivas por conductor
   container.innerHTML = conductores.map(nombre => {
-    const data = resumenPorChofer[nombre];
+    const data = resumenPorConductor[nombre];
     // Ordenar tickets más recientes primero
     data.items.sort((a, b) => (b.fecha || '').localeCompare(a.fecha || ''));
 
-    // Buscar si el chofer tiene foto registrada
-    const choferObj = (typeof choferes !== 'undefined') ? choferes.find(c => c.nombre === nombre) : null;
-    const avatarHtml = (choferObj && choferObj.foto && (typeof esFotoValida !== 'function' || esFotoValida(choferObj.foto)))
-      ? `<img src="${choferObj.foto}" alt="${nombre}" class="w-11 h-11 rounded-xl object-cover border border-indigo-200 shadow-sm" onerror="this.onerror=null; this.parentElement.innerHTML='<div class=\\\'w-11 h-11 bg-indigo-50 text-indigo-600 rounded-xl flex items-center justify-center font-bold text-lg border border-indigo-100 shadow-sm\\\'><i class=\\\'fa-solid fa-user-gear\\\'></i></div>';">`
+    // Buscar si el conductor tiene foto registrada
+    const listaConductores = (typeof conductores !== 'undefined' && Array.isArray(conductores)) ? conductores : ((typeof choferes !== 'undefined') ? choferes : []);
+    const conductorObj = listaConductores.find(c => c.nombre === nombre);
+    const avatarHtml = (conductorObj && conductorObj.foto && (typeof esFotoValida !== 'function' || esFotoValida(conductorObj.foto)))
+      ? `<img src="${conductorObj.foto}" alt="${nombre}" class="w-11 h-11 rounded-xl object-cover border border-indigo-200 shadow-sm" onerror="this.onerror=null; this.parentElement.innerHTML='<div class=\\\'w-11 h-11 bg-indigo-50 text-indigo-600 rounded-xl flex items-center justify-center font-bold text-lg border border-indigo-100 shadow-sm\\\'><i class=\\\'fa-solid fa-user-gear\\\'></i></div>';">`
       : `<div class="w-11 h-11 bg-indigo-50 text-indigo-600 rounded-xl flex items-center justify-center font-bold text-lg border border-indigo-100 shadow-sm"><i class="fa-solid fa-user-gear"></i></div>`;
 
     return `
@@ -957,17 +966,18 @@ window.eliminarClienteAdmin = function(index) {
   }
 };
 
-/* --- CHOFERES / PERSONAL --- */
-function renderChoferes() {
-  const container = document.getElementById('lista-choferes');
+/* --- CONDUCTORES / PERSONAL --- */
+function renderConductores() {
+  const container = document.getElementById('lista-conductores') || document.getElementById('lista-choferes');
   if (!container) return;
   
-  if (choferes.length === 0) {
-    container.innerHTML = '<p class="text-slate-500 text-xs italic col-span-full">No hay personal registrado.</p>';
+  const lista = (typeof conductores !== 'undefined' && Array.isArray(conductores)) ? conductores : ((typeof choferes !== 'undefined') ? choferes : []);
+  if (lista.length === 0) {
+    container.innerHTML = '<p class="text-slate-500 text-xs italic col-span-full">No hay conductores registrados.</p>';
     return;
   }
 
-  container.innerHTML = choferes.map((ch, index) => {
+  container.innerHTML = lista.map((ch, index) => {
     const enRuta = serviciosActivos[ch.nombre];
     let badgeHtml = '';
     if (enRuta) {
@@ -1002,25 +1012,30 @@ function renderChoferes() {
           </div>
         </div>
         <div class="flex items-center gap-1">
-          <button type="button" onclick="window.abrirModalEditarChofer(${index})" class="text-slate-400 hover:text-blue-600 p-2 cursor-pointer" title="Modificar personal"><i class="fa-solid fa-pen-to-square"></i></button>
-          <button type="button" onclick="window.eliminarChofer(${index})" class="text-slate-400 hover:text-red-500 p-2 cursor-pointer" title="Eliminar"><i class="fa-solid fa-trash-can"></i></button>
+          <button type="button" onclick="window.abrirModalEditarConductor(${index})" class="text-slate-400 hover:text-blue-600 p-2 cursor-pointer" title="Modificar conductor"><i class="fa-solid fa-pen-to-square"></i></button>
+          <button type="button" onclick="window.eliminarConductor(${index})" class="text-slate-400 hover:text-red-500 p-2 cursor-pointer" title="Eliminar conductor"><i class="fa-solid fa-trash-can"></i></button>
         </div>
       </div>
     `;
   }).join('');
-  if (typeof renderVisualizacionRutasChoferes === 'function') renderVisualizacionRutasChoferes();
+  if (typeof renderVisualizacionRutasConductores === 'function') renderVisualizacionRutasConductores();
+  else if (typeof renderVisualizacionRutasChoferes === 'function') renderVisualizacionRutasChoferes();
 }
+
+window.renderConductores = renderConductores;
+window.renderChoferes = renderConductores;
 
 document.addEventListener('click', function(e) {
   const target = e.target.closest('[data-accion="toggle-estado"]');
   if (target) {
     const index = parseInt(target.getAttribute('data-index'), 10);
-    window.toggleEstadoChofer(index);
+    window.toggleEstadoConductor(index);
   }
 });
 
-window.toggleEstadoChofer = function(index) {
-  const ch = choferes[index];
+window.toggleEstadoConductor = function(index) {
+  const lista = (typeof conductores !== 'undefined' && Array.isArray(conductores)) ? conductores : ((typeof choferes !== 'undefined') ? choferes : []);
+  const ch = lista[index];
   if (!ch) return;
   if (serviciosActivos[ch.nombre]) {
     alert("Este conductor se encuentra actualmente en ruta asignada.");
@@ -1028,26 +1043,33 @@ window.toggleEstadoChofer = function(index) {
   }
   ch.forzarNoDisponible = !ch.forzarNoDisponible;
   guardarDatosEnLocal();
-  renderChoferes();
+  renderConductores();
 };
+window.toggleEstadoChofer = window.toggleEstadoConductor;
 
-window.toggleModalChofer = function(show, editIndex = null) { 
-  const modal = document.getElementById('modal-chofer');
-  const form = document.getElementById('form-chofer') || document.querySelector('#modal-chofer form');
-  const preview = document.getElementById('preview-chofer-subida');
-  const inputEditIndex = document.getElementById('chofer-edit-index');
+window.toggleModalConductor = function(show, editIndex = null) { 
+  const modal = document.getElementById('modal-conductor') || document.getElementById('modal-chofer');
+  const form = document.getElementById('form-conductor') || document.getElementById('form-chofer') || document.querySelector('#modal-conductor form') || document.querySelector('#modal-chofer form');
+  const preview = document.getElementById('preview-conductor-subida') || document.getElementById('preview-chofer-subida');
+  const inputEditIndex = document.getElementById('conductor-edit-index') || document.getElementById('chofer-edit-index');
   if (!modal) return;
+
+  const lista = (typeof conductores !== 'undefined' && Array.isArray(conductores)) ? conductores : ((typeof choferes !== 'undefined') ? choferes : []);
 
   if (show) {
     if (editIndex !== null && editIndex !== undefined && editIndex !== '' && !isNaN(editIndex)) {
       const idx = parseInt(editIndex, 10);
       if (inputEditIndex) inputEditIndex.value = idx;
-      const ch = choferes[idx];
+      const ch = lista[idx];
       if (ch) {
-        document.getElementById('chofer-nombre').value = ch.nombre || '';
-        document.getElementById('chofer-dni').value = ch.dni || '';
-        document.getElementById('chofer-telefono').value = ch.telefono || '';
-        document.getElementById('chofer-foto-input').value = ch.foto || '';
+        const inputNom = document.getElementById('conductor-nombre') || document.getElementById('chofer-nombre');
+        const inputDni = document.getElementById('conductor-dni') || document.getElementById('chofer-dni');
+        const inputTel = document.getElementById('conductor-telefono') || document.getElementById('chofer-telefono');
+        const inputFoto = document.getElementById('conductor-foto-input') || document.getElementById('chofer-foto-input');
+        if (inputNom) inputNom.value = ch.nombre || '';
+        if (inputDni) inputDni.value = ch.dni || '';
+        if (inputTel) inputTel.value = ch.telefono || '';
+        if (inputFoto) inputFoto.value = ch.foto || '';
         if (preview) {
           preview.innerHTML = (ch.foto && (typeof esFotoValida !== 'function' || esFotoValida(ch.foto))) 
             ? `<img src="${ch.foto}" class="w-16 h-16 object-cover rounded-full border-2 border-blue-400 mx-auto" onerror="this.onerror=null; this.parentElement.innerHTML='<span class=\\\'text-xs text-slate-400\\\'>Sin foto</span>';">` 
@@ -1057,102 +1079,192 @@ window.toggleModalChofer = function(show, editIndex = null) {
     } else {
       if (inputEditIndex) inputEditIndex.value = '';
       if (form) form.reset();
-      document.getElementById('chofer-foto-input').value = '';
+      const inputFoto = document.getElementById('conductor-foto-input') || document.getElementById('chofer-foto-input');
+      if (inputFoto) inputFoto.value = '';
       if (preview) preview.innerHTML = '<span class="text-xs text-slate-400">Ninguna imagen seleccionada</span>';
     }
   }
   modal.classList.toggle('hidden', !show); 
 };
+window.toggleModalChofer = window.toggleModalConductor;
 
-window.abrirModalEditarChofer = function(index) {
-  window.toggleModalChofer(true, index);
+window.abrirModalEditarConductor = function(index) {
+  window.toggleModalConductor(true, index);
 };
+window.abrirModalEditarChofer = window.abrirModalEditarConductor;
 
-window.agregarChofer = function(e) {
+window.agregarConductor = async function(e) {
   if (e) e.preventDefault();
-  const inputEditIndex = document.getElementById('chofer-edit-index');
+  const inputEditIndex = document.getElementById('conductor-edit-index') || document.getElementById('chofer-edit-index');
   const editIndexVal = inputEditIndex ? inputEditIndex.value : '';
 
-  let fotoVal = (document.getElementById('chofer-foto-input')?.value || '').trim();
+  const inputFoto = document.getElementById('conductor-foto-input') || document.getElementById('chofer-foto-input');
+  let fotoVal = (inputFoto?.value || '').trim();
   // Validar y sanear la URL de la foto para evitar rutas huérfanas como /ui o /yui
   if (typeof esFotoValida === 'function' && !esFotoValida(fotoVal)) {
     fotoVal = '';
   }
 
-  const choferData = {
-    nombre: (document.getElementById('chofer-nombre')?.value || '').trim(),
-    dni: (document.getElementById('chofer-dni')?.value || '').trim(),
-    telefono: (document.getElementById('chofer-telefono')?.value || '').trim(),
+  const inputNom = document.getElementById('conductor-nombre') || document.getElementById('chofer-nombre');
+  const inputDni = document.getElementById('conductor-dni') || document.getElementById('chofer-dni');
+  const inputTel = document.getElementById('conductor-telefono') || document.getElementById('chofer-telefono');
+
+  const conductorData = {
+    nombre: (inputNom?.value || '').trim(),
+    dni: (inputDni?.value || '').trim(),
+    telefono: (inputTel?.value || '').trim(),
     foto: fotoVal
   };
 
-  if (editIndexVal !== '' && !isNaN(editIndexVal)) {
-    const idx = parseInt(editIndexVal, 10);
-    if (idx >= 0 && idx < choferes.length) {
-      const nombreAnterior = choferes[idx].nombre;
-      const nombreNuevo = choferData.nombre;
-      choferes[idx] = choferData;
+  if (!conductorData.nombre) {
+    alert('Por favor, introduce el nombre del conductor.');
+    return;
+  }
 
-      // Si se editó el nombre del conductor, propagar el cambio a todas sus rutas en memoria y en Supabase
-      if (nombreAnterior && nombreNuevo && nombreAnterior !== nombreNuevo) {
-        if (typeof rutas !== 'undefined' && Array.isArray(rutas)) {
-          rutas.forEach(r => {
-            if (r.conductor === nombreAnterior || r.chofer === nombreAnterior) {
-              r.conductor = nombreNuevo;
-              r.chofer = nombreNuevo;
-              if (r.id && typeof actualizarConductorRutaSupabase === 'function') {
-                actualizarConductorRutaSupabase(r.id, nombreNuevo);
+  const btnSubmit = document.querySelector('#modal-conductor button[type="submit"]') || document.querySelector('#modal-chofer button[type="submit"]');
+  const textoOriginal = btnSubmit ? btnSubmit.innerHTML : 'Guardar Conductor';
+  if (btnSubmit) {
+    btnSubmit.disabled = true;
+    btnSubmit.innerHTML = '<i class="fa-solid fa-spinner animate-spin"></i> Guardando...';
+  }
+
+  try {
+    let listaConductores = (typeof conductores !== 'undefined' && Array.isArray(conductores)) ? conductores : ((typeof choferes !== 'undefined') ? choferes : []);
+
+    if (editIndexVal !== '' && !isNaN(editIndexVal)) {
+      const idx = parseInt(editIndexVal, 10);
+      if (idx >= 0 && idx < listaConductores.length) {
+        const nombreAnterior = listaConductores[idx].nombre;
+        const nombreNuevo = conductorData.nombre;
+        listaConductores[idx] = conductorData;
+
+        // Si se editó el nombre del conductor, propagar el cambio a todas sus rutas en memoria y en Supabase
+        if (nombreAnterior && nombreNuevo && nombreAnterior !== nombreNuevo) {
+          console.log(`📡 Actualizando conductor "${nombreAnterior}" a "${nombreNuevo}" en rutas de Supabase...`);
+
+          let totalRutasAfectadas = 0;
+          if (typeof rutas !== 'undefined' && Array.isArray(rutas)) {
+            rutas.forEach(r => {
+              if (r.conductor === nombreAnterior || r.chofer === nombreAnterior) {
+                r.conductor = nombreNuevo;
+                r.chofer = nombreNuevo;
+                totalRutasAfectadas++;
               }
-            }
+            });
+            window.rutas = rutas;
+          }
+
+          // Propagar cambio a Supabase para emitir evento Realtime UPDATE a todos los dispositivos
+          if (typeof actualizarNombreConductorEnRutasSupabase === 'function') {
+            await actualizarNombreConductorEnRutasSupabase(nombreAnterior, nombreNuevo);
+          } else if (typeof _supabase !== 'undefined' && _supabase) {
+            await _supabase.from('rutas').update({ conductor: nombreNuevo }).eq('conductor', nombreAnterior);
+          }
+
+          // Si el conductor aún no tenía rutas guardadas en Supabase, crear su registro base en la tabla rutas
+          if (totalRutasAfectadas === 0 && typeof insertarRutaSupabase === 'function') {
+            await insertarRutaSupabase({
+              conductor: nombreNuevo,
+              vehiculo: '',
+              estado: 'pendiente',
+              dia: 'Lunes',
+              clientes: [],
+              tipoCliente: 'Mixto'
+            });
+          }
+        }
+      } else {
+        listaConductores.push(conductorData);
+        // Persistir en tabla rutas de Supabase con la columna conductor
+        if (typeof insertarRutaSupabase === 'function') {
+          await insertarRutaSupabase({
+            conductor: conductorData.nombre,
+            vehiculo: '',
+            estado: 'pendiente',
+            dia: 'Lunes',
+            clientes: [],
+            tipoCliente: 'Mixto'
           });
         }
       }
     } else {
-      choferes.push(choferData);
+      listaConductores.push(conductorData);
+      // Al crear un nuevo conductor, guardarlo en la tabla principal "rutas" de Supabase
+      // Esto dispara el evento Realtime 'INSERT' a todos los dispositivos conectados
+      console.log(`📡 Registrando nuevo conductor "${conductorData.nombre}" en tabla "rutas" de Supabase...`);
+      if (typeof insertarRutaSupabase === 'function') {
+        await insertarRutaSupabase({
+          conductor: conductorData.nombre,
+          vehiculo: '',
+          estado: 'pendiente',
+          dia: 'Lunes',
+          clientes: [],
+          tipoCliente: 'Mixto'
+        });
+      }
     }
-  } else {
-    choferes.push(choferData);
+
+    if (inputEditIndex) inputEditIndex.value = '';
+    window.conductores = listaConductores;
+    window.choferes = listaConductores;
+    guardarDatosEnLocal();
+    window.toggleModalConductor(false);
+    renderConductores();
+    if (typeof refrescarVistasRutas === 'function') {
+      refrescarVistasRutas();
+    }
+
+    if (typeof mostrarToastLogistica === 'function') {
+      mostrarToastLogistica(`✓ Conductor "${conductorData.nombre}" guardado y sincronizado`);
+    }
+  } catch (err) {
+    console.error('Error al guardar conductor:', err);
+    alert('Error al guardar conductor: ' + (err.message || 'Error desconocido'));
+  } finally {
+    if (btnSubmit) {
+      btnSubmit.disabled = false;
+      btnSubmit.innerHTML = textoOriginal;
+    }
   }
-
-  if (inputEditIndex) inputEditIndex.value = '';
-  guardarDatosEnLocal();
-  window.toggleModalChofer(false);
-  renderChoferes();
 };
+window.agregarChofer = window.agregarConductor;
 
-window.manejarSubidaImagenChofer = function(event) {
+window.manejarSubidaImagenConductor = function(event) {
   const file = event.target.files[0];
   if (!file) return;
   const reader = new FileReader();
   reader.onload = function(e) {
-    document.getElementById('chofer-foto-input').value = e.target.result;
-    const preview = document.getElementById('preview-chofer-subida');
+    const inputFoto = document.getElementById('conductor-foto-input') || document.getElementById('chofer-foto-input');
+    if (inputFoto) inputFoto.value = e.target.result;
+    const preview = document.getElementById('preview-conductor-subida') || document.getElementById('preview-chofer-subida');
     if (preview) {
       preview.innerHTML = `<img src="${e.target.result}" class="w-16 h-16 object-cover rounded-full border-2 border-blue-400 mx-auto">`;
     }
   };
   reader.readAsDataURL(file);
 };
+window.manejarSubidaImagenChofer = window.manejarSubidaImagenConductor;
 
-window.eliminarChofer = async function(index) {
-  if (typeof choferes === 'undefined' || !choferes[index]) return;
-  const ch = choferes[index];
-  const nombreChofer = ch.nombre;
+window.eliminarConductor = async function(index) {
+  const listaConductores = (typeof conductores !== 'undefined' && Array.isArray(conductores)) ? conductores : ((typeof choferes !== 'undefined') ? choferes : []);
+  if (!listaConductores[index]) return;
+  const ch = listaConductores[index];
+  const nombreConductor = ch.nombre;
 
-  if (!confirm(`¿Estás seguro de que deseas eliminar al conductor "${nombreChofer}"?`)) {
+  if (!confirm(`¿Estás seguro de que deseas eliminar al conductor "${nombreConductor}"?`)) {
     return;
   }
 
   // 1. Identificar todas las rutas asignadas a este conductor
-  const rutasDelChofer = (typeof rutas !== 'undefined' && Array.isArray(rutas))
-    ? rutas.filter(r => (r.chofer === nombreChofer || r.conductor === nombreChofer))
+  const rutasDelConductor = (typeof rutas !== 'undefined' && Array.isArray(rutas))
+    ? rutas.filter(r => (r.conductor === nombreConductor || r.chofer === nombreConductor))
     : [];
 
   // 2. Si Supabase está disponible, eliminar cada ruta en la base de datos de forma asíncrona
   if (typeof _supabase !== 'undefined' && _supabase) {
     let errorEncontrado = null;
 
-    for (const r of rutasDelChofer) {
+    for (const r of rutasDelConductor) {
       if (r.id) {
         const esTemp = typeof r.id === 'string' && (r.id.startsWith('temp_') || r.id.startsWith('ruta_init_'));
         if (!esTemp) {
@@ -1164,7 +1276,7 @@ window.eliminarChofer = async function(index) {
 
           // 2. Validar que no devuelva error
           if (error) {
-            console.error(`❌ Error al eliminar ruta ${r.id} del conductor "${nombreChofer}" en Supabase:`, error.message);
+            console.error(`❌ Error al eliminar ruta ${r.id} del conductor "${nombreConductor}" en Supabase:`, error.message);
             errorEncontrado = error;
             break; // Detener para evitar eliminación incompleta
           }
@@ -1182,7 +1294,7 @@ window.eliminarChofer = async function(index) {
       await _supabase
         .from('rutas')
         .delete()
-        .eq('conductor', nombreChofer);
+        .eq('conductor', nombreConductor);
     } catch (e) {
       console.warn('Aviso al limpiar rutas por conductor en Supabase:', e);
     }
@@ -1190,39 +1302,44 @@ window.eliminarChofer = async function(index) {
 
   // 3. SOLO una vez que Supabase confirme que se ha borrado con éxito:
   // Eliminar sus rutas del array local
-  rutas = rutas.filter(r => (r.chofer !== nombreChofer && r.conductor !== nombreChofer));
+  rutas = rutas.filter(r => (r.conductor !== nombreConductor && r.chofer !== nombreConductor));
   window.rutas = rutas;
 
-  // Eliminar el conductor del array local de choferes
-  const idxActual = choferes.findIndex(c => c.nombre === nombreChofer);
+  // Eliminar el conductor del array local de conductores
+  const idxActual = listaConductores.findIndex(c => c.nombre === nombreConductor);
   if (idxActual !== -1) {
-    choferes.splice(idxActual, 1);
+    listaConductores.splice(idxActual, 1);
   }
+
+  window.conductores = listaConductores;
+  window.choferes = listaConductores;
 
   // Persistir en local y re-renderizar la interfaz
   guardarDatosEnLocal();
-  renderChoferes();
+  renderConductores();
   if (typeof refrescarVistasRutas === 'function') {
     refrescarVistasRutas();
   }
 
   if (typeof mostrarToastLogistica === 'function') {
-    mostrarToastLogistica(`✓ Conductor "${nombreChofer}" eliminado correctamente`);
+    mostrarToastLogistica(`✓ Conductor "${nombreConductor}" eliminado correctamente`);
   }
 };
+window.eliminarChofer = window.eliminarConductor;
 
 /* --- HISTORIAL Y SEMANA (CON MODAL DE CARROS INCLUIDO) --- */
-function renderHistorialChoferesGrid() {
-  const grid = document.getElementById('grid-choferes-historial');
+function renderHistorialConductoresGrid() {
+  const grid = document.getElementById('grid-conductores-historial') || document.getElementById('grid-choferes-historial');
   if (!grid) return;
-  const panel = document.getElementById('panel-detalle-historial-chofer');
+  const panel = document.getElementById('panel-detalle-historial-conductor') || document.getElementById('panel-detalle-historial-chofer');
   if (panel) panel.classList.add('hidden');
   grid.classList.remove('hidden');
 
-  grid.innerHTML = choferes.map(ch => {
-    const rutasFin = historialFinalizadas.filter(h => h.chofer === ch.nombre);
+  const lista = (window.conductores || window.choferes || []);
+  grid.innerHTML = lista.map(ch => {
+    const rutasFin = historialFinalizadas.filter(h => (h.conductor === ch.nombre || h.chofer === ch.nombre));
     return `
-      <div onclick="verDetalleHistorialChofer('${ch.nombre}')" class="light-card light-card-hover rounded-2xl p-6 border border-slate-200 cursor-pointer space-y-4">
+      <div onclick="verDetalleHistorialConductor('${ch.nombre}')" class="light-card light-card-hover rounded-2xl p-6 border border-slate-200 cursor-pointer space-y-4">
         <div class="flex items-center justify-between">
           <div class="flex items-center gap-3">
             <div class="w-12 h-12 bg-purple-50 text-purple-600 rounded-xl flex items-center justify-center font-bold text-lg border border-purple-100">
@@ -1242,6 +1359,8 @@ function renderHistorialChoferesGrid() {
     `;
   }).join('');
 }
+window.renderHistorialConductoresGrid = renderHistorialConductoresGrid;
+window.renderHistorialChoferesGrid = renderHistorialConductoresGrid;
 
 window.abrirModalCarrosRuta = function(target) {
   let r = null;
@@ -1326,7 +1445,10 @@ const NOMBRES_MESES_HISTORIAL = [
 
 window.historialMesesAbiertos = window.historialMesesAbiertos || new Set();
 window.historialLimiteRenderPorMes = window.historialLimiteRenderPorMes || {};
-window._rutasActualesChofer = [];
+window._rutasActualesConductor = [];
+window._rutasActualesChofer = window._rutasActualesConductor;
+window._gruposMesesActuales = [];
+window._filtroHistorialTexto = '';
 window._gruposMesesActuales = [];
 window._filtroHistorialTexto = '';
 
@@ -1450,7 +1572,7 @@ function renderizarTarjetaRutaHistorial(r) {
 
   return `
     <div id="card-hist-ruta-${safeId}" class="bg-white rounded-2xl border border-slate-200/90 overflow-hidden shadow-2xs hover:shadow-md transition-all hover:border-purple-300">
-      <div onclick="toggleHistorialChoferDetalle('${safeId}')" class="p-3.5 bg-slate-50/90 hover:bg-slate-100/90 cursor-pointer flex justify-between items-center select-none gap-2 transition-colors">
+      <div onclick="toggleHistorialConductorDetalle('${safeId}')" class="p-3.5 bg-slate-50/90 hover:bg-slate-100/90 cursor-pointer flex justify-between items-center select-none gap-2 transition-colors">
         <div class="min-w-0 flex-1">
           <div class="flex items-center gap-1.5 flex-wrap">
             <span class="font-extrabold text-xs text-slate-900">${fechaLegible}</span>
@@ -1610,13 +1732,14 @@ window.cargarMasRutasMes = function(claveMes) {
 /**
  * Despliegue inline rápido del desglose de carros por cliente en una ruta.
  */
-window.toggleHistorialChoferDetalle = function(idOIndex) {
+window.toggleHistorialConductorDetalle = function(idOIndex) {
   let targetId = String(idOIndex);
   let el = document.getElementById('detalle-carros-' + targetId);
   let chevron = document.getElementById('chevron-ruta-' + targetId);
 
-  if (!el && typeof idOIndex === 'number' && window._rutasActualesChofer && window._rutasActualesChofer[idOIndex]) {
-    targetId = window._rutasActualesChofer[idOIndex].id;
+  const rutasActuales = window._rutasActualesConductor || window._rutasActualesChofer;
+  if (!el && typeof idOIndex === 'number' && rutasActuales && rutasActuales[idOIndex]) {
+    targetId = rutasActuales[idOIndex].id;
     el = document.getElementById('detalle-carros-' + targetId);
     chevron = document.getElementById('chevron-ruta-' + targetId);
   }
@@ -1632,6 +1755,7 @@ window.toggleHistorialChoferDetalle = function(idOIndex) {
     if (chevron) chevron.classList.remove('rotate-180', 'text-purple-600');
   }
 };
+window.toggleHistorialChoferDetalle = window.toggleHistorialConductorDetalle;
 
 /**
  * Filtro reactivo de búsqueda.
@@ -1645,10 +1769,10 @@ window.filtrarRutasHistorial = function(texto) {
  * Ejecución del renderizado jerárquico mensual.
  */
 function ejecutarRenderizadoHistorial() {
-  const container = document.getElementById('hist-lista-rutas-finalizadas') || document.getElementById('contenedor-rutas-finalizadas-chofer');
+  const container = document.getElementById('hist-lista-rutas-finalizadas') || document.getElementById('contenedor-rutas-finalizadas-conductor') || document.getElementById('contenedor-rutas-finalizadas-chofer');
   if (!container) return;
 
-  const rutasBase = window._rutasActualesChofer || [];
+  const rutasBase = window._rutasActualesConductor || window._rutasActualesChofer || [];
   if (rutasBase.length === 0) {
     container.innerHTML = `
       <div class="p-6 text-center text-slate-400 bg-slate-50/70 rounded-2xl border border-dashed border-slate-200 space-y-2">
@@ -1792,36 +1916,39 @@ function escapeHtmlAttr(str) {
     .replace(/>/g, '&gt;');
 }
 
-window.renderizarRutasFinalizadasChofer = function(rutasFinalizadasDelChofer) {
-  window._rutasActualesChofer = rutasFinalizadasDelChofer || [];
+window.renderizarRutasFinalizadasConductor = function(rutasFinalizadasDelConductor) {
+  window._rutasActualesConductor = rutasFinalizadasDelConductor || [];
+  window._rutasActualesChofer = window._rutasActualesConductor;
   window._filtroHistorialTexto = '';
   window.historialLimiteRenderPorMes = {};
   window.historialMesesAbiertos = new Set();
   ejecutarRenderizadoHistorial();
 };
+window.renderizarRutasFinalizadasChofer = window.renderizarRutasFinalizadasConductor;
 
-window.verDetalleHistorialChofer = function(nombreChofer) {
-  const grid = document.getElementById('grid-choferes-historial');
+window.verDetalleHistorialConductor = function(nombreConductor) {
+  const grid = document.getElementById('grid-conductores-historial') || document.getElementById('grid-choferes-historial');
   if (grid) grid.classList.add('hidden');
-  const panel = document.getElementById('panel-detalle-historial-chofer');
+  const panel = document.getElementById('panel-detalle-historial-conductor') || document.getElementById('panel-detalle-historial-chofer');
   if (panel) panel.classList.remove('hidden');
 
-  window.choferSeleccionadoActual = nombreChofer;
+  window.conductorSeleccionadoActual = nombreConductor;
+  window.choferSeleccionadoActual = nombreConductor;
 
-  const elNom = document.getElementById('hist-chofer-nombre');
-  if (elNom) elNom.innerText = nombreChofer;
+  const elNom = document.getElementById('hist-conductor-nombre') || document.getElementById('hist-chofer-nombre');
+  if (elNom) elNom.innerText = nombreConductor;
 
-  const fin = historialFinalizadas.filter(h => h.chofer === nombreChofer);
+  const fin = historialFinalizadas.filter(h => (h.conductor === nombreConductor || h.chofer === nombreConductor));
   
-  const badgeHoras = document.getElementById('hist-chofer-horas');
+  const badgeHoras = document.getElementById('hist-conductor-horas') || document.getElementById('hist-chofer-horas');
   if (badgeHoras) {
     badgeHoras.innerText = `${fin.length} ${fin.length === 1 ? 'ruta completada' : 'rutas completadas'}`;
   }
 
   // Renderizado optimizado con agrupación mensual jerárquica
-  window.renderizarRutasFinalizadasChofer(fin);
+  window.renderizarRutasFinalizadasConductor(fin);
 
-  const rep = repostajes.filter(r => r.chofer === nombreChofer);
+  const rep = repostajes.filter(r => (r.conductor === nombreConductor || r.chofer === nombreConductor));
   const containerRep = document.getElementById('hist-lista-repostajes');
   if (containerRep) {
     containerRep.innerHTML = rep.length === 0 ? '<p class="text-xs text-slate-500 italic">Sin repostajes.</p>' :
@@ -1837,7 +1964,7 @@ window.verDetalleHistorialChofer = function(nombreChofer) {
   }
 
   // Filtrar excluyendo rutas completadas o archivadas
-  const prox = rutas.filter(r => r.chofer === nombreChofer && r.estado !== 'completada' && r.estado !== 'finalizada' && r.estado !== 'archivada');
+  const prox = rutas.filter(r => (r.conductor === nombreConductor || r.chofer === nombreConductor) && r.estado !== 'completada' && r.estado !== 'finalizada' && r.estado !== 'archivada');
   const containerProx = document.getElementById('hist-lista-proximas-rutas');
   if (containerProx) {
     containerProx.innerHTML = prox.length === 0 ? '<p class="text-xs text-slate-500 italic">Sin próximas rutas pendientes.</p>' :
@@ -1852,14 +1979,16 @@ window.verDetalleHistorialChofer = function(nombreChofer) {
   }
 };
 
-window.seleccionarConductorHistorial = window.verDetalleHistorialChofer;
+window.verDetalleHistorialChofer = window.verDetalleHistorialConductor;
+window.seleccionarConductorHistorial = window.verDetalleHistorialConductor;
 
-window.cerrarDetalleHistorialChofer = function() {
-  const panel = document.getElementById('panel-detalle-historial-chofer');
+window.cerrarDetalleHistorialConductor = function() {
+  const panel = document.getElementById('panel-detalle-historial-conductor') || document.getElementById('panel-detalle-historial-chofer');
   if (panel) panel.classList.add('hidden');
-  const grid = document.getElementById('grid-choferes-historial');
+  const grid = document.getElementById('grid-conductores-historial') || document.getElementById('grid-choferes-historial');
   if (grid) grid.classList.remove('hidden');
 };
+window.cerrarDetalleHistorialChofer = window.cerrarDetalleHistorialConductor;
 
 function renderDiasSemana() {
   const grid = document.getElementById('grid-dias-semana');
@@ -1874,7 +2003,7 @@ function renderDiasSemana() {
       norm(r.dia) === norm(dia) && 
       r.estado !== 'completada' && r.estado !== 'finalizada' && r.estado !== 'archivada'
     );
-    const choferesConRuta = [...new Set(rutasDelDia.map(r => (r.conductor || r.chofer)).filter(Boolean))];
+    const conductoresConRuta = [...new Set(rutasDelDia.map(r => (r.conductor || r.chofer)).filter(Boolean))];
 
     grid.innerHTML += `
       <div onclick="abrirDetalleDia('${dia}')" class="light-card light-card-hover rounded-2xl p-6 border border-slate-200 cursor-pointer flex flex-col justify-between h-48 group">
@@ -1888,7 +2017,7 @@ function renderDiasSemana() {
           </span>
         </div>
         <div class="border-t border-slate-100 pt-4 flex justify-between items-center text-xs text-slate-500 font-semibold">
-          <span><i class="fa-solid fa-user-group text-indigo-600"></i> ${choferesConRuta.length} Conductor(es) con ruta</span>
+          <span><i class="fa-solid fa-user-group text-indigo-600"></i> ${conductoresConRuta.length} Conductor(es) con ruta</span>
           <span class="text-blue-600 font-bold">Asignar <i class="fa-solid fa-chevron-right text-[10px]"></i></span>
         </div>
       </div>
@@ -1909,7 +2038,7 @@ window.abrirDetalleDia = function(dia) {
   const tit = document.getElementById('titulo-dia-seleccionado');
   if (tit) tit.innerText = dia.toUpperCase();
 
-  renderGridChoferesAsignacion();
+  renderGridConductoresAsignacion();
 };
 
 window.cerrarDetalleDia = function() {
@@ -1942,7 +2071,7 @@ window.cambiarDiaDetalle = function(delta) {
   const tit = document.getElementById('titulo-dia-seleccionado');
   if (tit) tit.innerText = nuevoDia.toUpperCase();
 
-  renderGridChoferesAsignacion();
+  renderGridConductoresAsignacion();
   if (typeof actualizarCabeceraModalAsignarRuta === 'function') {
     actualizarCabeceraModalAsignarRuta();
   }
@@ -1983,7 +2112,7 @@ window.cambiarDiaModalAsignar = function(delta) {
   // 7. Sincronizar la interfaz principal de fondo
   const titPrincipal = document.getElementById('titulo-dia-seleccionado');
   if (titPrincipal) titPrincipal.innerText = nuevoDia.toUpperCase();
-  renderGridChoferesAsignacion();
+  renderGridConductoresAsignacion();
 };
 
 window.seleccionarDiaModalAsignar = function(diaObjetivo) {
@@ -2004,7 +2133,7 @@ window.seleccionarDiaModalAsignar = function(diaObjetivo) {
 
   const titPrincipal = document.getElementById('titulo-dia-seleccionado');
   if (titPrincipal) titPrincipal.innerText = diaObjetivo.toUpperCase();
-  renderGridChoferesAsignacion();
+  renderGridConductoresAsignacion();
 };
 
 document.addEventListener('keydown', function(e) {
@@ -2033,8 +2162,8 @@ document.addEventListener('keydown', function(e) {
   }
 });
 
-function renderGridChoferesAsignacion() {
-  const container = document.getElementById('grid-choferes-asignacion');
+function renderGridConductoresAsignacion() {
+  const container = document.getElementById('grid-conductores-asignacion') || document.getElementById('grid-choferes-asignacion');
   const badgeTotal = document.getElementById('badge-total-rutas-dia');
   if (!container || !diaSeleccionadoActual) return;
 
@@ -2047,8 +2176,13 @@ function renderGridChoferesAsignacion() {
   );
   if (badgeTotal) badgeTotal.innerText = `${rutasDelDia.length} Ruta(s) Activa(s)`;
 
-  container.innerHTML = choferes.map(ch => {
-    const rutasDelChofer = rutasDelDia.filter(r => (r.chofer === ch.nombre || r.conductor === ch.nombre));
+  const listaCond = (typeof conductores !== 'undefined' && conductores.length > 0) ? conductores : ((typeof choferes !== 'undefined') ? choferes : []);
+  container.innerHTML = listaCond.map(ch => {
+    const chNorm = (ch.nombre || '').trim().toLowerCase();
+    const rutasDelConductor = rutasDelDia.filter(r => {
+      const cond = (r.conductor || r.chofer || '').trim().toLowerCase();
+      return cond === chNorm;
+    });
 
     return `
       <div class="light-card rounded-2xl p-5 border border-slate-200 space-y-3 relative">
@@ -2063,8 +2197,8 @@ function renderGridChoferesAsignacion() {
         </div>
 
         <div class="space-y-2 pt-2 border-t border-slate-100">
-          ${rutasDelChofer.length === 0 ? '<p class="text-xs text-slate-400 italic">Sin rutas pendientes este día.</p>' :
-            rutasDelChofer.map((r, rIndex) => `
+          ${rutasDelConductor.length === 0 ? '<p class="text-xs text-slate-400 italic">Sin rutas pendientes este día.</p>' :
+            rutasDelConductor.map((r, rIndex) => `
               <div class="bg-slate-50 rounded-xl p-3 border border-slate-200 space-y-2 text-xs hover:border-blue-300 transition-all">
                 <div class="flex justify-between items-center font-bold text-blue-900">
                   <div class="flex items-center gap-2">
@@ -2088,29 +2222,36 @@ function renderGridChoferesAsignacion() {
       </div>
     `;
   }).join('');
-  if (typeof renderVisualizacionRutasChoferes === 'function') renderVisualizacionRutasChoferes();
+  if (typeof renderVisualizacionRutasConductores === 'function') {
+    renderVisualizacionRutasConductores();
+  } else if (typeof renderVisualizacionRutasChoferes === 'function') {
+    renderVisualizacionRutasChoferes();
+  }
 }
+window.renderGridConductoresAsignacion = renderGridConductoresAsignacion;
+window.renderGridChoferesAsignacion = renderGridConductoresAsignacion;
 
 window.finalizarRutaDesdePlanificacion = async function(rutaId) {
   if (!rutaId) return;
   const ruta = rutas.find(r => String(r.id) === String(rutaId));
   if (!ruta) return;
 
-  const chofer = ruta.chofer || ruta.conductor || '';
+  const conductor = ruta.conductor || ruta.chofer || '';
   const dia = ruta.dia || diaSeleccionadoActual || 'este día';
 
   // Si el modal de cierre está disponible, abrirlo para registrar Km y observaciones opcionales
   if (typeof prepararCierreRutaModal === 'function') {
-    prepararCierreRutaModal(chofer, ruta.id);
+    prepararCierreRutaModal(conductor, ruta.id);
   } else {
-    if (confirm(`¿Marcar como finalizada la ruta de ${chofer} para el ${dia}?\n\nAl finalizarla, desaparecerá de la planificación semanal activa y se guardará automáticamente en el Historial.`)) {
+    if (confirm(`¿Marcar como finalizada la ruta de ${conductor} para el ${dia}?\n\nAl finalizarla, desaparecerá de la planificación semanal activa y se guardará automáticamente en el Historial.`)) {
       await finalizarRuta(rutaId, {
         dia: dia,
-        chofer: chofer,
+        conductor: conductor,
+        chofer: conductor,
         obs: `Ruta finalizada desde Planificación Semanal (${dia})`
       });
       if (typeof mostrarToastLogistica === 'function') {
-        mostrarToastLogistica(`✓ Ruta de ${chofer} finalizada y registrada en el Historial`);
+        mostrarToastLogistica(`✓ Ruta de ${conductor} finalizada y registrada en el Historial`);
       }
     }
   }
@@ -2118,13 +2259,13 @@ window.finalizarRutaDesdePlanificacion = async function(rutaId) {
 
 window.actualizarCabeceraModalAsignarRuta = function() {
   const diaTexto = (typeof diaActualModal !== 'undefined' && diaActualModal) || diaSeleccionadoActual || (typeof diaActual !== 'undefined' ? diaActual : 'Lunes') || 'Lunes';
-  const choferTexto = choferSeleccionadoAsignacion || 'Conductor';
+  const conductorTexto = conductorSeleccionadoAsignacion || choferSeleccionadoAsignacion || 'Conductor';
 
-  const titChofer = document.getElementById('modal-asignar-chofer-nombre');
+  const titConductor = document.getElementById('modal-asignar-conductor-nombre') || document.getElementById('modal-asignar-chofer-nombre');
   const titDia = document.getElementById('modal-asignar-dia-nombre');
 
-  if (titChofer && titDia) {
-    titChofer.innerText = choferTexto;
+  if (titConductor && titDia) {
+    titConductor.innerText = conductorTexto;
     titDia.innerText = diaTexto;
     titDia.classList.remove('scale-110');
     void titDia.offsetWidth;
@@ -2136,7 +2277,7 @@ window.actualizarCabeceraModalAsignarRuta = function() {
   } else {
     const tit = document.getElementById('modal-asignar-titulo');
     if (tit) {
-      tit.innerHTML = `<i class="fa-solid fa-route text-blue-600"></i> <span>Asignar Ruta a <span id="modal-asignar-chofer-nombre">${choferTexto}</span></span> <span class="text-blue-600 font-extrabold">(<span id="modal-asignar-dia-nombre" class="transition-transform duration-150 inline-block">${diaTexto}</span>)</span>`;
+      tit.innerHTML = `<i class="fa-solid fa-route text-blue-600"></i> <span>Asignar Ruta a <span id="modal-asignar-conductor-nombre">${conductorTexto}</span></span> <span class="text-blue-600 font-extrabold">(<span id="modal-asignar-dia-nombre" class="transition-transform duration-150 inline-block">${diaTexto}</span>)</span>`;
     }
   }
 
@@ -2193,16 +2334,17 @@ function cargarEstadoDiaEnModal(dia) {
   if (!modalAsignacionTemporal) modalAsignacionTemporal = {};
 
   const norm = str => str ? str.normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim().toLowerCase() : '';
+  const conductorActual = conductorSeleccionadoAsignacion || choferSeleccionadoAsignacion || '';
 
-  // Si no está inicializado este día en memoria temporal, inicializarlo desde las rutas existentes del chofer
+  // Si no está inicializado este día en memoria temporal, inicializarlo desde las rutas existentes del conductor
   if (!modalAsignacionTemporal[dia]) {
-    const rutasChoferDia = (typeof rutas !== 'undefined' && Array.isArray(rutas))
-      ? rutas.filter(r => norm(r.dia) === norm(dia) && r.chofer === choferSeleccionadoAsignacion && r.estado !== 'completada' && r.estado !== 'finalizada')
+    const rutasConductorDia = (typeof rutas !== 'undefined' && Array.isArray(rutas))
+      ? rutas.filter(r => norm(r.dia) === norm(dia) && (r.conductor === conductorActual || r.chofer === conductorActual) && r.estado !== 'completada' && r.estado !== 'finalizada')
       : [];
 
     const clientesDia = [];
     let camionDia = '';
-    rutasChoferDia.forEach(r => {
+    rutasConductorDia.forEach(r => {
       if (r.camion && !camionDia) camionDia = r.camion;
       if (Array.isArray(r.clientes)) {
         r.clientes.forEach(c => {
@@ -2215,7 +2357,7 @@ function cargarEstadoDiaEnModal(dia) {
       clientes: clientesDia,
       camion: camionDia || (camiones[0]?.matricula || ''),
       modificado: false,
-      tieneRutasPrevias: rutasChoferDia.length > 0
+      tieneRutasPrevias: rutasConductorDia.length > 0
     };
   }
 
@@ -2332,8 +2474,11 @@ window.actualizarCamionDiaModal = function() {
   guardarEstadoDiaActualDesdeModal();
 };
 
-window.abrirModalAsignarRuta = function(nombreChofer) {
-  choferSeleccionadoAsignacion = nombreChofer;
+window.abrirModalAsignarRuta = function(nombreConductor) {
+  conductorSeleccionadoAsignacion = nombreConductor;
+  choferSeleccionadoAsignacion = nombreConductor;
+  window.conductorSeleccionadoAsignacion = nombreConductor;
+  window.choferSeleccionadoAsignacion = nombreConductor;
   clientesManualesTempRapido = [];
 
   const baseDia = diaSeleccionadoActual || (typeof diaActual !== 'undefined' ? diaActual : 'Lunes') || 'Lunes';
@@ -2347,16 +2492,16 @@ window.abrirModalAsignarRuta = function(nombreChofer) {
   window.diaSeleccionadoActual = canon;
   window.diaActual = canon;
 
-  // Inicializar memoria temporal de la semana completa para este chofer
+  // Inicializar memoria temporal de la semana completa para este conductor
   modalAsignacionTemporal = {};
   diasSemana.forEach(d => {
-    const rutasChoferDia = (typeof rutas !== 'undefined' && Array.isArray(rutas))
-      ? rutas.filter(r => norm(r.dia) === norm(d) && r.chofer === nombreChofer && r.estado !== 'completada' && r.estado !== 'finalizada')
+    const rutasConductorDia = (typeof rutas !== 'undefined' && Array.isArray(rutas))
+      ? rutas.filter(r => norm(r.dia) === norm(d) && (r.conductor === nombreConductor || r.chofer === nombreConductor) && r.estado !== 'completada' && r.estado !== 'finalizada')
       : [];
 
     const clientesDia = [];
     let camionDia = '';
-    rutasChoferDia.forEach(r => {
+    rutasConductorDia.forEach(r => {
       if (r.camion && !camionDia) camionDia = r.camion;
       if (Array.isArray(r.clientes)) {
         r.clientes.forEach(c => {
@@ -2369,7 +2514,7 @@ window.abrirModalAsignarRuta = function(nombreChofer) {
       clientes: clientesDia,
       camion: camionDia || (camiones[0]?.matricula || ''),
       modificado: false,
-      tieneRutasPrevias: rutasChoferDia.length > 0
+      tieneRutasPrevias: rutasConductorDia.length > 0
     };
   });
 
@@ -2610,14 +2755,16 @@ window.guardarRutaAsignadaRapida = async function(e) {
     const clientesDelDia = estado.clientes || [];
     const camionDelDia = estado.camion || (camiones[0]?.matricula || '');
 
-    // Eliminar las rutas pendientes anteriores de este chofer para este día específico
+    // Eliminar las rutas pendientes anteriores de este conductor para este día específico
     const indicesAEliminar = [];
     const idsAEliminar = [];
+    const conductorActual = conductorSeleccionadoAsignacion || choferSeleccionadoAsignacion;
+
     rutas.forEach((r, idx) => {
       const matchDia = norm(r.dia) === norm(dia);
-      const matchChofer = (r.chofer === choferSeleccionadoAsignacion || r.conductor === choferSeleccionadoAsignacion);
+      const matchConductor = (r.conductor === conductorActual || r.chofer === conductorActual);
       const noCompletada = r.estado !== 'completada' && r.estado !== 'finalizada';
-      if (matchDia && matchChofer && noCompletada) {
+      if (matchDia && matchConductor && noCompletada) {
         indicesAEliminar.push(idx);
         if (r.id) idsAEliminar.push(r.id);
       }
@@ -2638,7 +2785,7 @@ window.guardarRutaAsignadaRapida = async function(e) {
     if (clientesDelDia.length > 0) {
       if (typeof insertarRutaSupabase === 'function') {
         await insertarRutaSupabase({
-          conductor: choferSeleccionadoAsignacion,
+          conductor: conductorActual,
           vehiculo: camionDelDia,
           estado: 'pendiente',
           dia: dia,
@@ -2650,8 +2797,8 @@ window.guardarRutaAsignadaRapida = async function(e) {
           id: 'ruta_' + Date.now() + '_' + Math.random().toString(36).substr(2, 6),
           dia: dia,
           tipoCliente: 'Mixto',
-          chofer: choferSeleccionadoAsignacion,
-          conductor: choferSeleccionadoAsignacion,
+          conductor: conductorActual,
+          chofer: conductorActual,
           camion: camionDelDia,
           vehiculo: camionDelDia,
           clientes: [...clientesDelDia],
@@ -2671,22 +2818,25 @@ window.guardarRutaAsignadaRapida = async function(e) {
   if (typeof refrescarVistasRutas === 'function') {
     refrescarVistasRutas();
   } else {
-    renderGridChoferesAsignacion();
+    renderGridConductoresAsignacion();
     renderDiasSemana();
-    if (typeof renderVisualizacionRutasChoferes === 'function') {
+    if (typeof renderVisualizacionRutasConductores === 'function') {
+      renderVisualizacionRutasConductores();
+    } else if (typeof renderVisualizacionRutasChoferes === 'function') {
       renderVisualizacionRutasChoferes();
     }
   }
 
   const detalleDias = diasActualizados.length > 0 ? diasActualizados.join(', ') : 'semana';
+  const condAsigTexto = conductorSeleccionadoAsignacion || choferSeleccionadoAsignacion || 'Conductor';
   if (typeof mostrarToastLogistica === 'function') {
-    mostrarToastLogistica(`✓ Asignación consolidada para ${choferSeleccionadoAsignacion} (${detalleDias})`);
+    mostrarToastLogistica(`✓ Asignación consolidada para ${condAsigTexto} (${detalleDias})`);
   }
 };
 
-window.eliminarRutaConductor = async function(dia, choferNombre, rIndex, rutaId) {
+window.eliminarRutaConductor = async function(dia, conductorNombre, rIndex, rutaId) {
   const rutaNumTexto = (rIndex !== undefined && rIndex !== null && !isNaN(rIndex)) ? ` la Ruta ${Number(rIndex) + 1}` : ' la ruta';
-  if (!confirm(`¿Eliminar${rutaNumTexto} de ${choferNombre} para el ${dia}?`)) {
+  if (!confirm(`¿Eliminar${rutaNumTexto} de ${conductorNombre} para el ${dia}?`)) {
     return;
   }
 
@@ -2705,9 +2855,9 @@ window.eliminarRutaConductor = async function(dia, choferNombre, rIndex, rutaId)
     let count = 0;
     rutas.forEach((r, i) => {
       const matchDia = r.dia && r.dia.trim().toLowerCase() === dia.trim().toLowerCase();
-      const matchChofer = (r.chofer === choferNombre || r.conductor === choferNombre);
+      const matchConductor = (r.conductor === conductorNombre || r.chofer === conductorNombre);
       const noCompletada = r.estado !== 'completada' && r.estado !== 'finalizada' && r.estado !== 'archivada';
-      if (matchDia && matchChofer && noCompletada) {
+      if (matchDia && matchConductor && noCompletada) {
         if (count === Number(rIndex)) {
           targetIndex = i;
           rutaEliminar = r;
@@ -2768,8 +2918,10 @@ window.eliminarRutaConductor = async function(dia, choferNombre, rIndex, rutaId)
   if (typeof refrescarVistasRutas === 'function') {
     refrescarVistasRutas();
   } else {
-    renderGridChoferesAsignacion();
-    if (typeof renderVisualizacionRutasChoferes === 'function') {
+    renderGridConductoresAsignacion();
+    if (typeof renderVisualizacionRutasConductores === 'function') {
+      renderVisualizacionRutasConductores();
+    } else if (typeof renderVisualizacionRutasChoferes === 'function') {
       renderVisualizacionRutasChoferes();
     }
   }
@@ -2778,6 +2930,7 @@ window.eliminarRutaConductor = async function(dia, choferNombre, rIndex, rutaId)
     mostrarToastLogistica(`✓ Ruta eliminada correctamente`);
   }
 };
+window.eliminarRutaChofer = window.eliminarRutaConductor;
 /* --- GESTIÓN DE MODAL DE CAMIONES Y FILTROS --- */
 window.toggleModalCamion = function(show, editIndex = null) {
   const modal = document.getElementById('modal-camion');
