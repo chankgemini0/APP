@@ -11,19 +11,55 @@ function cargarStorage(clave, valorPorDefecto) {
 
 function esFotoValida(url) {
   if (!url || typeof url !== 'string') return false;
-  const s = url.trim().toLowerCase();
-  // Filtra rutas huérfanas, erróneas o de prueba comunes que provocan errores 404
-  if (s === '' || s === '/ui' || s === 'ui' || s === '/yui' || s === 'yui' || s === 'undefined' || s === 'null') {
-    return false;
+  const s = url.trim();
+  if (!s || s === 'undefined' || s === 'null' || s === '[object Object]') return false;
+
+  // 1. Data URLs base64 válidas (ej: fotos subidas desde archivo)
+  if (s.startsWith('data:image/')) return true;
+
+  // 2. URLs de Blob local
+  if (s.startsWith('blob:')) return true;
+
+  // 3. URLs web completas http:// o https://
+  if (/^https?:\/\//i.test(s)) {
+    try {
+      new URL(s);
+      return true;
+    } catch (e) {
+      return false;
+    }
   }
-  return true;
+
+  // 4. Archivos locales estáticos conocidos del proyecto
+  const archivosLocalesValidos = [
+    'bugamed_horizontal_cian-1-tinta.jpg',
+    'camion pequeño.webp',
+    'grande.webp',
+    'css/bugamed_icono_cian-1-tinta.jpg',
+    'bugamed_icono_cian-1-tinta.jpg'
+  ];
+  const nombreLimpio = s.replace(/^\.?\/+/, '').toLowerCase();
+  if (archivosLocalesValidos.includes(nombreLimpio)) return true;
+
+  // 5. Rutas relativas explícitas con prefijo de carpeta conocido y extensión de imagen
+  const tieneExtension = /\.(jpe?g|png|webp|gif|svg|avif|ico)($|\?)/i.test(s);
+  if (tieneExtension && (s.startsWith('./') || s.startsWith('/') || s.startsWith('assets/') || s.startsWith('img/') || s.startsWith('images/'))) {
+    return true;
+  }
+
+  return false;
 }
 window.esFotoValida = esFotoValida;
 
 function sanitizarConductoresStorage(lista) {
   if (!Array.isArray(lista)) return lista;
   let modificado = false;
-  const limpia = lista.map(ch => {
+  const limpia = lista.map((ch, idx) => {
+    if (!ch) return ch;
+    if (!ch.id && ch.id !== 0) {
+      ch.id = idx + 1;
+      modificado = true;
+    }
     if (ch && ch.foto && !esFotoValida(ch.foto)) {
       ch.foto = '';
       modificado = true;
@@ -43,31 +79,51 @@ function sanitizarConductoresStorage(lista) {
 window.sanitizarConductoresStorage = sanitizarConductoresStorage;
 window.sanitizarChoferesStorage = sanitizarConductoresStorage;
 
+function sanitizarCamionesStorage(lista) {
+  if (!Array.isArray(lista)) return lista;
+  let modificado = false;
+  const limpia = lista.map(c => {
+    if (!c) return c;
+    if (c.foto && !esFotoValida(c.foto)) {
+      c.foto = '';
+      modificado = true;
+    }
+    return c;
+  });
+  if (modificado) {
+    try {
+      localStorage.setItem('bugamed_camiones', JSON.stringify(limpia));
+    } catch (e) {}
+  }
+  return limpia;
+}
+window.sanitizarCamionesStorage = sanitizarCamionesStorage;
+
 // Variables Globales de Datos
-let camiones = cargarStorage('bugamed_camiones', [
+let camiones = sanitizarCamionesStorage(cargarStorage('bugamed_camiones', [
   { matricula: '4589-KLL', modelo: 'Iveco Daily 35-160', tipo: 'Pequeño', estado: 'Libre', foto: '' },
   { matricula: '8912-MBN', modelo: 'Iveco Stralis 360 E6', tipo: 'Grande', estado: 'Libre', foto: '' }
-]);
+]));
 
 let conductores = sanitizarConductoresStorage(cargarStorage('bugamed_conductores', cargarStorage('bugamed_choferes', [
-  { nombre: 'Antonio Fernández', dni: '44556677A', telefono: '+34 612 987 654', foto: '' },
-  { nombre: 'David Morales', dni: '88776655B', telefono: '+34 655 443 322', foto: '' }
+  { id: 1, nombre: 'Antonio Fernández', dni: '44556677A', telefono: '+34 612 987 654', foto: '' },
+  { id: 2, nombre: 'David Morales', dni: '88776655B', telefono: '+34 655 443 322', foto: '' }
 ])));
 let choferes = conductores;
 window.conductores = conductores;
 window.choferes = conductores;
 
 let clientes = cargarStorage('bugamed_clientes', [
-  { nombre: 'Hotel Meliá Palma', zona: 'Tarragona', tipo: 'Hoteles', direccion: 'Passeig Marítim 12', telefono: '+34 971 111 222', ubicacion: 'https://www.google.com/maps/search/?api=1&query=Hotel+Melia+Palma+Passeig+Maritim+12+Tarragona' },
-  { nombre: 'Hotel Salou Sun', zona: 'Salou', tipo: 'Hoteles', direccion: 'Av. Diputació 45', telefono: '+34 977 222 333', ubicacion: 'https://www.google.com/maps/search/?api=1&query=Hotel+Salou+Sun+Av+Diputacio+45+Salou' },
-  { nombre: 'Restaurante Cambrils Port', zona: 'Cambrils', tipo: 'Restaurantes', direccion: 'Puerto Deportivo 8', telefono: '+34 977 444 555', ubicacion: 'https://www.google.com/maps/search/?api=1&query=Restaurante+Cambrils+Port+Puerto+Deportivo+8+Cambrils' },
+  { nombre: 'Hotel Meliá Palma', zona: 'Tarragona', tipo: 'Hotel', direccion: 'Passeig Marítim 12', telefono: '+34 971 111 222', ubicacion: 'https://www.google.com/maps/search/?api=1&query=Hotel+Melia+Palma+Passeig+Maritim+12+Tarragona' },
+  { nombre: 'Hotel Salou Sun', zona: 'Salou', tipo: 'Hotel', direccion: 'Av. Diputació 45', telefono: '+34 977 222 333', ubicacion: 'https://www.google.com/maps/search/?api=1&query=Hotel+Salou+Sun+Av+Diputacio+45+Salou' },
+  { nombre: 'Restaurante Cambrils Port', zona: 'Cambrils', tipo: 'Restaurante', direccion: 'Puerto Deportivo 8', telefono: '+34 977 444 555', ubicacion: 'https://www.google.com/maps/search/?api=1&query=Restaurante+Cambrils+Port+Puerto+Deportivo+8+Cambrils' },
   { nombre: 'Camping Estanyet', zona: 'Alcanar', tipo: 'Camping', direccion: 'Playa Vinaròs km 3', telefono: '+34 977 722 111', ubicacion: 'https://www.google.com/maps/search/?api=1&query=Camping+Estanyet+Alcanar' }
 ]);
 
 let rutas = cargarStorage('bugamed_rutas', [
-  { id: 'ruta_init_1', dia: 'Lunes', tipoCliente: 'Hoteles', conductor: 'Antonio Fernández', chofer: 'Antonio Fernández', camion: '8912-MBN', vehiculo: '8912-MBN', clientes: ['Hotel Meliá Palma', 'Hotel Salou Sun'], estado: 'pendiente' },
-  { id: 'ruta_init_2', dia: 'Lunes', tipoCliente: 'Restaurantes', conductor: 'Antonio Fernández', chofer: 'Antonio Fernández', camion: '8912-MBN', vehiculo: '8912-MBN', clientes: ['Restaurante Cambrils Port'], estado: 'pendiente' },
-  { id: 'ruta_init_3', dia: 'Martes', tipoCliente: 'Restaurantes', conductor: 'David Morales', chofer: 'David Morales', camion: '4589-KLL', vehiculo: '4589-KLL', clientes: ['Restaurante Cambrils Port'], estado: 'pendiente' }
+  { id: 'ruta_init_1', dia: 'Lunes', tipoCliente: 'Hotel', conductor: 'Antonio Fernández', chofer: 'Antonio Fernández', camion: '8912-MBN', vehiculo: '8912-MBN', clientes: ['Hotel Meliá Palma', 'Hotel Salou Sun'], estado: 'pendiente' },
+  { id: 'ruta_init_2', dia: 'Lunes', tipoCliente: 'Restaurante', conductor: 'Antonio Fernández', chofer: 'Antonio Fernández', camion: '8912-MBN', vehiculo: '8912-MBN', clientes: ['Restaurante Cambrils Port'], estado: 'pendiente' },
+  { id: 'ruta_init_3', dia: 'Martes', tipoCliente: 'Restaurante', conductor: 'David Morales', chofer: 'David Morales', camion: '4589-KLL', vehiculo: '4589-KLL', clientes: ['Restaurante Cambrils Port'], estado: 'pendiente' }
 ]);
 window.rutas = rutas;
 
@@ -350,7 +406,8 @@ function registrarRutaEnHistorial(ruta, metadatos = {}) {
     horaInicio: horaInicio,
     horaFin: horaFin,
     detalleClientes: detalleClientes,
-    estado: 'completada'
+    estado: 'completada',
+    status: 'completed'
   };
 
   if (idxExistente !== -1) {
@@ -360,7 +417,8 @@ function registrarRutaEnHistorial(ruta, metadatos = {}) {
   }
 
   // Marcar estado en el objeto ruta
-  ruta.estado = 'finalizada';
+  ruta.estado = 'completada';
+  ruta.status = 'completed';
   ruta.fechaCompletada = fechaHoy;
   ruta.horaInicio = horaInicio;
   ruta.horaFin = horaFin;
@@ -376,7 +434,7 @@ function asegurarSincronizacionHistorial() {
   if (!Array.isArray(rutas) || !Array.isArray(historialFinalizadas)) return;
   let modificado = false;
   rutas.forEach(r => {
-    if (r.estado === 'completada' || r.estado === 'finalizada') {
+    if (r.estado === 'completada' || r.estado === 'finalizada' || r.status === 'completed') {
       const existe = historialFinalizadas.some(h => String(h.id) === String(r.id));
       if (!existe) {
         registrarRutaEnHistorial(r);

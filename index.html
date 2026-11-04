@@ -30,7 +30,7 @@
         <i class="fa-solid fa-house w-5"></i> INICIO
       </button>
       <button onclick="drawerNavigate('conductores')" class="w-full text-left px-4 py-3 rounded-xl hover:bg-indigo-600 transition-colors flex items-center gap-3 text-sm font-semibold">
-        <i class="fa-solid fa-users w-5"></i> Personal Bugamed
+        <i class="fa-solid fa-users w-5"></i> Plantilla
       </button>
       <button onclick="drawerNavigate('vista-conductor')" class="w-full text-left px-4 py-3 rounded-xl hover:bg-blue-600 transition-colors flex items-center gap-3 text-sm font-semibold">
         <i class="fa-solid fa-route w-5"></i> Resumen de Rutas
@@ -136,12 +136,12 @@
 
   <main class="max-w-7xl mx-auto px-4 sm:px-6 py-8 flex-1 w-full space-y-8 z-10 relative">
 
-    <!-- Navegación por Pestañas Principales (Personal Bugamed, INICIO, Resumen de Rutas) -->
+    <!-- Navegación por Pestañas Principales (Plantilla, INICIO, Resumen de Rutas) -->
     <div class="flex items-center bg-slate-200/80 p-1.5 rounded-2xl border border-slate-300 relative z-30 gap-1.5 shadow-sm">
-      <!-- 1. Personal Bugamed -->
+      <!-- 1. Plantilla -->
       <button id="tab-conductores" onclick="switchTab('conductores')" class="flex-1 min-w-[110px] sm:min-w-[130px] py-3 px-2 sm:px-3 rounded-xl text-xs sm:text-sm font-bold transition-all duration-200 flex items-center justify-center gap-2 text-slate-600 hover:text-blue-700 hover:bg-white/60 cursor-pointer">
         <i class="fa-solid fa-users text-sm sm:text-base"></i>
-        <span class="truncate">Personal Bugamed</span>
+        <span class="truncate">Plantilla</span>
       </button>
 
       <!-- 2. INICIO (Pestaña Central Destacada) -->
@@ -365,8 +365,8 @@
         </div>
         <div class="flex flex-wrap gap-1.5 w-full sm:w-auto">
           <button onclick="filtrarTipoCliente('Todos')" id="filtro-cli-todos" class="px-3 py-2 rounded-xl text-xs font-bold bg-purple-600 text-white border border-purple-600 cursor-pointer">Todos</button>
-          <button onclick="filtrarTipoCliente('Hoteles')" id="filtro-cli-hoteles" class="px-3 py-2 rounded-xl text-xs font-bold bg-slate-100 text-slate-600 border border-slate-300 hover:bg-slate-200 cursor-pointer">Hoteles</button>
-          <button onclick="filtrarTipoCliente('Restaurantes')" id="filtro-cli-restaurantes" class="px-3 py-2 rounded-xl text-xs font-bold bg-slate-100 text-slate-600 border border-slate-300 hover:bg-slate-200 cursor-pointer">Restaurantes</button>
+          <button onclick="filtrarTipoCliente('Hotel')" id="filtro-cli-hotel" class="px-3 py-2 rounded-xl text-xs font-bold bg-slate-100 text-slate-600 border border-slate-300 hover:bg-slate-200 cursor-pointer">Hotel</button>
+          <button onclick="filtrarTipoCliente('Restaurante')" id="filtro-cli-restaurante" class="px-3 py-2 rounded-xl text-xs font-bold bg-slate-100 text-slate-600 border border-slate-300 hover:bg-slate-200 cursor-pointer">Restaurante</button>
           <button onclick="filtrarTipoCliente('Mixto')" id="filtro-cli-mixto" class="px-3 py-2 rounded-xl text-xs font-bold bg-slate-100 text-slate-600 border border-slate-300 hover:bg-slate-200 cursor-pointer">Mixto</button>
           <button onclick="filtrarTipoCliente('Camping')" id="filtro-cli-camping" class="px-3 py-2 rounded-xl text-xs font-bold bg-slate-100 text-slate-600 border border-slate-300 hover:bg-slate-200 cursor-pointer">Camping</button>
         </div>
@@ -404,29 +404,68 @@
           </span>
         </div>
 
-        <div class="grid grid-cols-1 lg:grid-cols-3 gap-6 items-start">
-          <div class="space-y-3 bg-white/60 p-4 rounded-2xl border border-slate-200/80 shadow-2xs">
-            <h4 class="font-bold text-slate-800 text-base flex items-center justify-between border-b border-slate-200 pb-2.5">
+        <!-- DISTRIBUCIÓN REORGANIZADA: RUTAS FINALIZADAS AMPLIADAS A LA IZQUIERDA Y PRÓXIMAS RUTAS CON REPOSTAJES DESPLEGABLES A LA DERECHA -->
+        <div class="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+          
+          <!-- COLUMNA PRINCIPAL IZQUIERDA: RUTAS FINALIZADAS (ESPACIO AMPLIADO) -->
+          <div class="lg:col-span-7 xl:col-span-8 space-y-3 bg-white/70 p-5 sm:p-6 rounded-2xl border border-slate-200/90 shadow-2xs">
+            <h4 class="font-extrabold text-slate-800 text-base flex items-center justify-between border-b border-slate-200 pb-3">
               <span class="flex items-center gap-2">
-                <i class="fa-solid fa-circle-check text-emerald-600"></i> Rutas Finalizadas
+                <i class="fa-solid fa-circle-check text-emerald-600 text-lg"></i> Rutas Finalizadas
               </span>
             </h4>
-            <div id="hist-lista-rutas-finalizadas" class="space-y-3 max-h-[520px] overflow-y-auto custom-scrollbar pr-1"></div>
+            <div id="hist-lista-rutas-finalizadas" class="space-y-3 max-h-[720px] overflow-y-auto custom-scrollbar pr-1.5"></div>
           </div>
 
-          <div class="space-y-3 bg-white/60 p-4 rounded-2xl border border-slate-200/80 shadow-2xs">
-            <h4 class="font-bold text-slate-800 text-base flex items-center gap-2 border-b border-slate-200 pb-2.5">
-              <i class="fa-solid fa-gas-pump text-indigo-600"></i> Repostajes Realizados
-            </h4>
-            <div id="hist-lista-repostajes" class="space-y-3 max-h-[520px] overflow-y-auto custom-scrollbar pr-1"></div>
+          <!-- COLUMNA LATERAL DERECHA: PRÓXIMAS RUTAS Y REPOSTAJES REALIZADOS -->
+          <div class="lg:col-span-5 xl:col-span-4 space-y-5">
+            
+            <!-- 1. PRÓXIMAS RUTAS -->
+            <div class="space-y-3 bg-white/70 p-5 rounded-2xl border border-slate-200/90 shadow-2xs">
+              <h4 class="font-extrabold text-slate-800 text-base flex items-center justify-between border-b border-slate-200 pb-3">
+                <span class="flex items-center gap-2">
+                  <i class="fa-solid fa-calendar-day text-blue-600 text-lg"></i> Próximas Rutas
+                </span>
+                <span id="badge-contador-proximas-rutas" class="text-xs font-bold px-2.5 py-0.5 rounded-full bg-blue-50 text-blue-700 border border-blue-200">
+                  0 pendientes
+                </span>
+              </h4>
+              <div id="hist-lista-proximas-rutas" class="space-y-3 max-h-[320px] overflow-y-auto custom-scrollbar pr-1"></div>
+            </div>
+
+            <!-- 2. REPOSTAJES REALIZADOS (BLOQUE / PESTAÑA DESPLEGABLE TIPO ACORDEÓN) -->
+            <div class="bg-white/70 rounded-2xl border border-indigo-200/90 shadow-2xs overflow-hidden transition-all">
+              <!-- CABECERA ACCIONABLE PARA ABRIR / CERRAR A DEMANDA -->
+              <button type="button" onclick="toggleDesplegableRepostajesHistorial()" class="w-full p-4 bg-gradient-to-r from-indigo-50/70 via-purple-50/40 to-slate-50 hover:bg-indigo-100/60 cursor-pointer flex justify-between items-center select-none transition-all text-left group">
+                <div class="flex items-center gap-2.5 min-w-0">
+                  <div class="w-8 h-8 rounded-xl bg-indigo-100 text-indigo-700 flex items-center justify-center text-sm shadow-2xs shrink-0 group-hover:scale-105 transition-transform">
+                    <i class="fa-solid fa-gas-pump"></i>
+                  </div>
+                  <div class="min-w-0">
+                    <h4 class="font-extrabold text-slate-800 text-sm truncate flex items-center gap-1.5">
+                      <span>Repostajes Realizados</span>
+                    </h4>
+                    <p class="text-[11px] text-slate-500 font-medium truncate">Tickets y combustible</p>
+                  </div>
+                </div>
+                <div class="flex items-center gap-2 shrink-0 ml-2">
+                  <span id="badge-contador-repostajes-hist" class="text-[11px] font-bold px-2 py-0.5 rounded-full bg-indigo-100 text-indigo-800 border border-indigo-200 whitespace-nowrap">
+                    0 tickets
+                  </span>
+                  <span class="w-6 h-6 rounded-lg bg-white border border-slate-200 text-slate-500 flex items-center justify-center text-xs shadow-2xs">
+                    <i id="chevron-repostajes-hist" class="fa-solid fa-chevron-down text-slate-500 text-xs transition-transform duration-200"></i>
+                  </span>
+                </div>
+              </button>
+
+              <!-- CONTENIDO INTERNO DESPLEGABLE -->
+              <div id="contenedor-desplegable-repostajes" class="hidden p-3.5 border-t border-indigo-100 space-y-2.5 bg-slate-50/50">
+                <div id="hist-lista-repostajes" class="space-y-2.5 max-h-[350px] overflow-y-auto custom-scrollbar pr-1"></div>
+              </div>
+            </div>
+
           </div>
 
-          <div class="space-y-3 bg-white/60 p-4 rounded-2xl border border-slate-200/80 shadow-2xs">
-            <h4 class="font-bold text-slate-800 text-base flex items-center gap-2 border-b border-slate-200 pb-2.5">
-              <i class="fa-solid fa-calendar-day text-blue-600"></i> Próximas Rutas
-            </h4>
-            <div id="hist-lista-proximas-rutas" class="space-y-3 max-h-[520px] overflow-y-auto custom-scrollbar pr-1"></div>
-          </div>
         </div>
       </div>
     </section>
@@ -723,14 +762,14 @@
         <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div class="bg-purple-50/40 p-4 rounded-xl border border-purple-200 space-y-3">
             <h4 class="font-extrabold text-purple-900 text-sm flex items-center gap-2">
-              <i class="fa-solid fa-hotel text-purple-600"></i> Hoteles
+              <i class="fa-solid fa-hotel text-purple-600"></i> Hotel
             </h4>
             <div id="lista-checkbox-hoteles" class="space-y-2 max-h-36 overflow-y-auto custom-scrollbar pr-1"></div>
           </div>
 
           <div class="bg-blue-50/40 p-4 rounded-xl border border-blue-200 space-y-3">
             <h4 class="font-extrabold text-blue-900 text-sm flex items-center gap-2">
-              <i class="fa-solid fa-utensils text-blue-600"></i> Restaurantes
+              <i class="fa-solid fa-utensils text-blue-600"></i> Restaurante
             </h4>
             <div id="lista-checkbox-restaurantes" class="space-y-2 max-h-36 overflow-y-auto custom-scrollbar pr-1"></div>
           </div>
@@ -794,6 +833,58 @@
           <button type="submit" class="px-5 py-2.5 bg-purple-600 hover:bg-purple-700 text-white text-sm rounded-xl font-bold cursor-pointer">Finalizar Servicio</button>
         </div>
       </form>
+    </div>
+  </div>
+
+  <!-- MODAL FIN DE RUTA (RESUMEN TIEMPO TRANSCURRIDO) -->
+  <div id="modal-fin-ruta" class="fixed inset-0 bg-slate-900/80 backdrop-blur-sm z-50 flex items-center justify-center p-4 hidden select-none">
+    <div class="bg-white rounded-3xl max-w-md w-full p-6 sm:p-8 space-y-6 shadow-2xl border border-slate-100 text-center relative pointer-events-auto">
+      
+      <!-- Icono de Cabecera -->
+      <div class="w-20 h-20 mx-auto rounded-3xl bg-gradient-to-tr from-emerald-500 to-teal-400 text-white flex items-center justify-center text-3xl shadow-lg shadow-emerald-500/30">
+        <i class="fa-solid fa-flag-checkered"></i>
+      </div>
+
+      <!-- Títulos y Estado -->
+      <div>
+        <span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-black uppercase tracking-wider bg-emerald-100 text-emerald-800 border border-emerald-200 mb-2">
+          <i class="fa-solid fa-circle-check text-emerald-600"></i> Ruta Finalizada con Éxito
+        </span>
+        <h3 class="text-2xl font-black text-slate-800 tracking-tight">¡Servicio Completado!</h3>
+        <p class="text-xs sm:text-sm text-slate-500 mt-1">El recorrido y los datos han sido sincronizados correctamente en Supabase.</p>
+      </div>
+
+      <!-- Bloque Destacado de Tiempo Invertido -->
+      <div class="bg-slate-50 border-2 border-indigo-100 rounded-2xl p-5 text-center relative overflow-hidden">
+        <p class="text-[11px] font-black uppercase text-indigo-700 tracking-widest flex items-center justify-center gap-1.5 mb-1">
+          <i class="fa-solid fa-stopwatch text-indigo-600"></i> Tiempo Total Invertido
+        </p>
+        <div id="modal-fin-ruta-duracion" class="text-3xl sm:text-4xl font-black text-indigo-950 font-mono tracking-tight my-1">
+          00h 00m 00s
+        </div>
+        <p class="text-[11px] text-slate-400 font-medium">Horas · Minutos · Segundos transcurridos</p>
+      </div>
+
+      <!-- Horas de Inicio y Fin -->
+      <div class="grid grid-cols-2 gap-3 text-xs">
+        <div class="bg-slate-50 p-3 rounded-xl border border-slate-200 text-left">
+          <span class="block text-[10px] uppercase font-bold text-slate-400 tracking-wider">Hora Inicio</span>
+          <span id="modal-fin-ruta-hora-inicio" class="font-extrabold text-slate-700 text-sm">--:--:--</span>
+        </div>
+        <div class="bg-slate-50 p-3 rounded-xl border border-slate-200 text-left">
+          <span class="block text-[10px] uppercase font-bold text-slate-400 tracking-wider">Hora Finalización</span>
+          <span id="modal-fin-ruta-hora-fin" class="font-extrabold text-slate-700 text-sm">--:--:--</span>
+        </div>
+      </div>
+
+      <!-- Botón de Aceptar (Obligatorio para cerrar el modal) -->
+      <div class="pt-2">
+        <button type="button" id="btn-modal-fin-ruta-aceptar" onclick="cerrarModalFinRutaYAceptar()" class="w-full py-4 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 active:scale-98 text-white font-extrabold text-sm sm:text-base rounded-2xl shadow-lg shadow-indigo-500/25 transition-all flex items-center justify-center gap-2 cursor-pointer">
+          <i class="fa-solid fa-check text-lg"></i>
+          <span>Aceptar</span>
+        </button>
+      </div>
+
     </div>
   </div>
 
@@ -926,8 +1017,8 @@
         <div>
           <label class="block text-xs font-bold uppercase text-slate-500 mb-1.5">Tipo de Establecimiento</label>
           <select id="cli-tipo" class="w-full bg-blue-50/50 border border-blue-200 rounded-xl px-3.5 py-2.5 text-sm text-slate-800 focus:ring-2 focus:ring-blue-100 focus:outline-none transition-all">
-            <option value="Hoteles">Hotel</option>
-            <option value="Restaurantes">Restaurante</option>
+            <option value="Hotel">Hotel</option>
+            <option value="Restaurante">Restaurante</option>
             <option value="Mixto">Mixto</option>
             <option value="Camping">Camping</option>
           </select>
@@ -1002,8 +1093,8 @@
           </select>
         </div>
         <div>
-          <label class="block text-xs font-bold uppercase text-slate-500 mb-1.5">Foto del Camión (URL o Ruta)</label>
-          <input type="text" id="camion-foto-input" placeholder="Ej: camion1.webp o URL de imagen" class="w-full bg-slate-50 border border-slate-300 rounded-xl px-3.5 py-2.5 text-sm text-slate-800 focus:border-blue-500">
+          <label class="block text-xs font-bold uppercase text-slate-500 mb-1.5">Foto del Camión (Opcional - URL web)</label>
+          <input type="text" id="camion-foto-input" placeholder="https://... o dejar vacío" class="w-full bg-slate-50 border border-slate-300 rounded-xl px-3.5 py-2.5 text-sm text-slate-800 focus:border-blue-500">
         </div>
         <div id="preview-camion-subida"></div>
 
@@ -1027,6 +1118,7 @@
 
       <form id="form-conductor" onsubmit="agregarConductor(event)" class="space-y-4">
         <input type="hidden" id="conductor-edit-index" value="">
+        <input type="hidden" id="conductor-id" value="">
         <div>
           <label class="block text-xs font-bold uppercase text-slate-500 mb-1.5">Nombre Completo</label>
           <input type="text" id="conductor-nombre" required placeholder="Ej: Manuel García" class="w-full bg-slate-50 border border-slate-300 rounded-xl px-3.5 py-2.5 text-sm text-slate-800 focus:border-indigo-500">
@@ -1040,8 +1132,8 @@
           <input type="tel" id="conductor-telefono" required placeholder="Ej: +34 600 000 000" class="w-full bg-slate-50 border border-slate-300 rounded-xl px-3.5 py-2.5 text-sm text-slate-800 focus:border-indigo-500">
         </div>
         <div>
-          <label class="block text-xs font-bold uppercase text-slate-500 mb-1.5">Foto de Perfil (URL o Ruta)</label>
-          <input type="text" id="conductor-foto-input" placeholder="Ej: antonio.jpg o URL de imagen" class="w-full bg-slate-50 border border-slate-300 rounded-xl px-3.5 py-2.5 text-sm text-slate-800 focus:border-indigo-500">
+          <label class="block text-xs font-bold uppercase text-slate-500 mb-1.5">Foto de Perfil (Opcional - URL web)</label>
+          <input type="text" id="conductor-foto-input" placeholder="https://... o dejar vacío" class="w-full bg-slate-50 border border-slate-300 rounded-xl px-3.5 py-2.5 text-sm text-slate-800 focus:border-indigo-500">
         </div>
         <div id="preview-conductor-subida"></div>
 

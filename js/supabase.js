@@ -6,14 +6,39 @@
 const SUPABASE_URL = 'https://zhkmkexcnnenlbpmlmqs.supabase.co';
 const SUPABASE_ANON_KEY = 'sb_publishable_B4Hyksen3_nd3PAiDuWmRQ_17hDGNVq';
 
-// Inicialización del cliente global de Supabase
+// Limpieza preventiva de sesiones residuales o expiradas en localStorage que puedan provocar 401
+try {
+  const projectRef = 'zhkmkexcnnenlbpmlmqs';
+  const storageKey = `sb-${projectRef}-auth-token`;
+  const tokenVal = localStorage.getItem(storageKey);
+  if (tokenVal) {
+    try {
+      const p = JSON.parse(tokenVal);
+      if (p?.expires_at && (p.expires_at * 1000) < Date.now()) {
+        console.warn('⚠️ Token de sesión previo expirado en localStorage. Limpiando para evitar error 401...');
+        localStorage.removeItem(storageKey);
+      }
+    } catch (e) {
+      localStorage.removeItem(storageKey);
+    }
+  }
+} catch (e) {}
+
+// Inicialización del cliente global de Supabase con cabeceras de autorización garantizadas
 let _supabase = null;
 try {
   if (typeof window.supabase !== 'undefined' && typeof window.supabase.createClient === 'function') {
     _supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
       auth: {
-        persistSession: true,
-        autoRefreshToken: true
+        persistSession: false,
+        autoRefreshToken: false,
+        detectSessionInUrl: false
+      },
+      global: {
+        headers: {
+          'apikey': SUPABASE_ANON_KEY,
+          'Authorization': `Bearer ${SUPABASE_ANON_KEY}`
+        }
       },
       realtime: {
         params: {
@@ -21,7 +46,7 @@ try {
         }
       }
     });
-    console.log('✓ Cliente global _supabase inicializado correctamente.');
+    console.log('✓ Cliente global _supabase inicializado con cabeceras de autorización válidas.');
   } else {
     console.warn('⚠️ Supabase SDK no detectado en window.supabase. Verifica la inclusión del CDN.');
   }
@@ -35,6 +60,8 @@ window._supabase = _supabase;
 // Referencia al canal de Realtime para suscripciones
 let canalRealtimeRutas = null;
 let canalRealtimeRepostajes = null;
+let canalRealtimeConductores = null;
+const conductoresEliminadosSet = new Set();
 
 /**
  * Extrae y normaliza de forma segura la columna "clientes" (jsonb o array) recibida desde Supabase.
@@ -119,6 +146,9 @@ function mapearRutaDesdeSupabase(r) {
 
   const vehiculoFinal = r.vehiculo || r.camion || rutaExistente?.vehiculo || rutaExistente?.camion || metaLocal.camion || '';
 
+  const estadoFinal = r.estado || (r.status === 'completed' ? 'completada' : (rutaExistente?.estado || 'pendiente'));
+  const statusFinal = r.status || (estadoFinal === 'completada' || estadoFinal === 'finalizada' ? 'completed' : (rutaExistente?.status || 'pending'));
+
   return {
     id: r.id,
     created_at: r.created_at || rutaExistente?.created_at || new Date().toISOString(),
@@ -126,10 +156,13 @@ function mapearRutaDesdeSupabase(r) {
     chofer: conductorFinal,
     vehiculo: vehiculoFinal,
     camion: vehiculoFinal,
-    estado: r.estado || rutaExistente?.estado || 'pendiente',
+    estado: estadoFinal,
+    status: statusFinal,
+    completed_at: r.completed_at || rutaExistente?.completed_at || null,
+    duration_seconds: r.duration_seconds || rutaExistente?.duration_seconds || null,
     dia: diaFinal,
     clientes: clientesFinal,
-    tipoCliente: r.tipoCliente || metaLocal.tipoCliente || rutaExistente?.tipoCliente || 'Mixto'
+    tipoCliente: (typeof normalizarTipoCliente === 'function' ? normalizarTipoCliente(r.tipoCliente || metaLocal.tipoCliente || rutaExistente?.tipoCliente || 'Mixto') : (r.tipoCliente || metaLocal.tipoCliente || rutaExistente?.tipoCliente || 'Mixto'))
   };
 }
 
@@ -358,6 +391,41 @@ async function actualizarEstadoRutaSupabase(id, nuevoEstado) {
     console.log(`✓ Estado de ruta ${id} actualizado a "${nuevoEstado}" en Supabase.`);
   } catch (err) {
     console.error('Excepción al actualizar estado de ruta en Supabase:', err);
+  }
+}
+
+/**
+ * 3.0.1. FINALIZAR RUTA: Actualiza el estado de la ruta en la tabla 'rutas' de Supabase
+ * Marca estado: 'finalizada' (tabla 'rutas' oficial).
+ */
+async function finalizarRutaSupabase(id, totalSegundos = 0, completedAt = new Date().toISOString()) {
+  if (!id) return;
+  if (!_supabase) {
+    console.warn('⚠️ Supabase no disponible para finalizarRutaSupabase.');
+    return;
+  }
+
+  // Si es un ID temporal local que aún no existe en Supabase, no llamar a la API
+  if (String(id).startsWith('temp_') || String(id).startsWith('ruta_init_')) {
+    console.log(`ℹ️ Ruta con ID temporal (${id}), se omite llamada de red.`);
+    return;
+  }
+
+  try {
+    // La tabla correcta en Supabase es 'rutas' y la columna de estado es 'estado'
+    const { data, error } = await _supabase
+      .from('rutas')
+      .update({ estado: 'finalizada' })
+      .eq('id', id)
+      .select();
+
+    if (error) {
+      console.error('Error al actualizar ruta en tabla "rutas" de Supabase:', error.message);
+    } else {
+      console.log(`✓ Ruta ${id} finalizada exitosamente en Supabase (tabla 'rutas').`);
+    }
+  } catch (err) {
+    console.error('Excepción al finalizar ruta en Supabase:', err);
   }
 }
 
@@ -939,7 +1007,7 @@ function procesarEventoRealtime(payload) {
       sincronizarServicioActivoDesdeRealtime(nuevoRegistro, rutas[index]);
 
       // Si la ruta cambió su estado a completada o finalizada, registrarla en Historial
-      if (nuevoRegistro.estado === 'completada' || nuevoRegistro.estado === 'finalizada') {
+      if (nuevoRegistro.estado === 'completada' || nuevoRegistro.estado === 'finalizada' || nuevoRegistro.status === 'completed') {
         if (typeof registrarRutaEnHistorial === 'function') {
           registrarRutaEnHistorial(rutas[index]);
         }
@@ -955,12 +1023,13 @@ function procesarEventoRealtime(payload) {
         vehiculo: nuevoRegistro.vehiculo || nuevoRegistro.camion || rutaMapeada.vehiculo || '',
         camion: nuevoRegistro.vehiculo || nuevoRegistro.camion || rutaMapeada.camion || '',
         estado: nuevoRegistro.estado !== undefined ? nuevoRegistro.estado : (rutaMapeada.estado || 'pendiente'),
+        status: nuevoRegistro.status !== undefined ? nuevoRegistro.status : (rutaMapeada.status || 'pending'),
         dia: nuevoRegistro.dia || rutaMapeada.dia || 'Lunes',
         clientes: clientesActualizados
       };
       rutas.unshift(rutaNueva);
 
-      if (nuevoRegistro.estado === 'completada' || nuevoRegistro.estado === 'finalizada') {
+      if (nuevoRegistro.estado === 'completada' || nuevoRegistro.estado === 'finalizada' || nuevoRegistro.status === 'completed') {
         if (typeof registrarRutaEnHistorial === 'function') {
           registrarRutaEnHistorial(rutaNueva);
         }
@@ -1001,36 +1070,154 @@ function procesarEventoRealtime(payload) {
   // GESTIÓN DEL EVENTO DELETE
   // =========================================================================
   } else if (tipoEvento === 'DELETE') {
-    // Eliminar el registro del array local buscando por payload.old.id
-    const idEliminar = viejoRegistro?.id ?? payload.old_record?.id ?? payload.id;
-    console.log(`🗑️ [DELETE Realtime] Procesando evento DELETE para ID:`, idEliminar);
+    // 1. Extraer ID del registro eliminado de forma robusta y completa desde el payload
+    let idEliminar = null;
 
-    if (idEliminar) {
-      const antes = rutas.length;
-      rutas = rutas.filter(r => String(r.id) !== String(idEliminar));
+    if (payload.old && typeof payload.old === 'object') {
+      idEliminar = payload.old.id ?? payload.old.ID ?? payload.old.id_ruta ?? payload.old.ruta_id ?? payload.old._id ?? null;
+      if (!idEliminar) {
+        // Si no tiene id estándar, buscar cualquier propiedad que contenga 'id'
+        const keys = Object.keys(payload.old);
+        for (const k of keys) {
+          if (k.toLowerCase().includes('id')) {
+            idEliminar = payload.old[k];
+            break;
+          }
+        }
+        if (!idEliminar && keys.length === 1 && (typeof payload.old[keys[0]] === 'string' || typeof payload.old[keys[0]] === 'number')) {
+          idEliminar = payload.old[keys[0]];
+        }
+      }
+    } else if (payload.old && (typeof payload.old === 'string' || typeof payload.old === 'number')) {
+      idEliminar = payload.old;
+    }
+
+    if (!idEliminar && payload.old_record && typeof payload.old_record === 'object') {
+      idEliminar = payload.old_record.id ?? payload.old_record.ID ?? payload.old_record.id_ruta ?? payload.old_record.ruta_id ?? null;
+    }
+
+    if (!idEliminar && payload.id) {
+      idEliminar = payload.id;
+    }
+
+    if (!idEliminar && payload.record && typeof payload.record === 'object') {
+      idEliminar = payload.record.id ?? payload.record.ID ?? null;
+    }
+
+    if (!idEliminar && payload.data && typeof payload.data === 'object') {
+      idEliminar = payload.data.id ?? payload.data.old?.id ?? null;
+    }
+
+    console.log(`🗑️ [DELETE Realtime] Procesando evento DELETE para ID:`, idEliminar, payload);
+
+    if (idEliminar !== null && idEliminar !== undefined && String(idEliminar).trim() !== '') {
+      const idEliminarStr = String(idEliminar).trim();
+      const idEliminarNum = Number(idEliminar);
+      const esNumeroValido = !isNaN(idEliminarNum);
+
+      let totalEliminados = 0;
+
+      // 2. Eliminar de forma inmediata del array local 'rutas' mutando in-place (splice)
+      if (typeof rutas !== 'undefined' && Array.isArray(rutas)) {
+        for (let i = rutas.length - 1; i >= 0; i--) {
+          const r = rutas[i];
+          if (!r) continue;
+          const rIdStr = (r.id !== undefined && r.id !== null) ? String(r.id).trim() : '';
+          const rIdNum = Number(r.id);
+          const coincide = (rIdStr !== '' && rIdStr === idEliminarStr) ||
+                           (esNumeroValido && !isNaN(rIdNum) && rIdNum === idEliminarNum);
+          if (coincide) {
+            rutas.splice(i, 1);
+            totalEliminados++;
+          }
+        }
+        // Asignación de seguridad con filter
+        rutas = rutas.filter(r => {
+          if (!r) return false;
+          const rIdStr = (r.id !== undefined && r.id !== null) ? String(r.id).trim() : '';
+          const rIdNum = Number(r.id);
+          return !(rIdStr === idEliminarStr || (esNumeroValido && !isNaN(rIdNum) && rIdNum === idEliminarNum));
+        });
+      }
+
+      // Eliminar de forma inmediata de 'window.rutas' mutando in-place (splice)
+      if (typeof window !== 'undefined' && Array.isArray(window.rutas)) {
+        for (let i = window.rutas.length - 1; i >= 0; i--) {
+          const r = window.rutas[i];
+          if (!r) continue;
+          const rIdStr = (r.id !== undefined && r.id !== null) ? String(r.id).trim() : '';
+          const rIdNum = Number(r.id);
+          const coincide = (rIdStr !== '' && rIdStr === idEliminarStr) ||
+                           (esNumeroValido && !isNaN(rIdNum) && rIdNum === idEliminarNum);
+          if (coincide) {
+            window.rutas.splice(i, 1);
+            totalEliminados++;
+          }
+        }
+        window.rutas = (typeof rutas !== 'undefined' && Array.isArray(rutas)) ? rutas : window.rutas.filter(r => {
+          if (!r) return false;
+          const rIdStr = (r.id !== undefined && r.id !== null) ? String(r.id).trim() : '';
+          const rIdNum = Number(r.id);
+          return !(rIdStr === idEliminarStr || (esNumeroValido && !isNaN(rIdNum) && rIdNum === idEliminarNum));
+        });
+      }
+
+      // Sincronizar referencia global en window
+      if (typeof rutas !== 'undefined') {
+        window.rutas = rutas;
+      }
 
       // Limpiar metadatos locales asociados
       const metaLocal = (typeof cargarStorage === 'function') ? cargarStorage('bugamed_rutas_meta', {}) : {};
-      if (metaLocal[idEliminar]) {
+      if (metaLocal[idEliminar] || metaLocal[idEliminarStr]) {
         delete metaLocal[idEliminar];
+        delete metaLocal[idEliminarStr];
         try { localStorage.setItem('bugamed_rutas_meta', JSON.stringify(metaLocal)); } catch (e) {}
       }
 
-      if (rutas.length !== antes) {
-        console.log(`✓ Ruta ${idEliminar} eliminada localmente tras evento DELETE de Supabase.`);
+      // Si la ruta estaba en servicio activo en algún conductor, liberarlo
+      if (typeof serviciosActivos !== 'undefined' && serviciosActivos) {
+        for (const cond in serviciosActivos) {
+          const serv = serviciosActivos[cond];
+          if (serv && (String(serv.rutaId).trim() === idEliminarStr || (esNumeroValido && Number(serv.rutaId) === idEliminarNum))) {
+            delete serviciosActivos[cond];
+            try { localStorage.setItem('bugamed_servicios_activos', JSON.stringify(serviciosActivos)); } catch (e) {}
+            break;
+          }
+        }
       }
 
-      window.rutas = rutas;
-      if (typeof guardarDatosEnLocal === 'function') guardarDatosEnLocal();
+      console.log(`✓ [DELETE Realtime] Ruta ID ${idEliminarStr} eliminada localmente (${totalEliminados} coincidencia(s)).`);
 
-      // 3. Re-renderizado instantáneo de la interfaz
+      // Guardar de inmediato en almacenamiento local
+      if (typeof guardarDatosEnLocal === 'function') {
+        try { guardarDatosEnLocal(); } catch (e) { console.warn('Aviso guardarDatosEnLocal:', e); }
+      } else {
+        try {
+          const rGuardar = (typeof rutas !== 'undefined' && Array.isArray(rutas)) ? rutas : (window.rutas || []);
+          localStorage.setItem('bugamed_rutas', JSON.stringify(rGuardar));
+        } catch (e) {}
+      }
+
+      // Limpieza proactiva en el DOM: remover tarjetas que referencien directamente este ID
+      try {
+        const selectorQuery = `[onclick*="'${idEliminarStr}'"], [onclick*='"${idEliminarStr}"'], [data-ruta-id="${idEliminarStr}"], [data-id="${idEliminarStr}"]`;
+        document.querySelectorAll(selectorQuery).forEach(el => {
+          const tarjetaRuta = el.closest('.light-card, .bg-slate-50, div[class*="rounded-xl"]') || el;
+          if (tarjetaRuta && tarjetaRuta.parentElement && tarjetaRuta !== document.body) {
+            tarjetaRuta.remove();
+          }
+        });
+      } catch (e) {}
+
+      // 3. Re-renderizado instantáneo de la interfaz para que desaparezca en todos los dispositivos conectados
       refrescarVistasRutas();
 
       if (typeof mostrarToastLogistica === 'function') {
-        mostrarToastLogistica(`⚡ Una ruta fue eliminada.`);
+        mostrarToastLogistica(`⚡ Una ruta fue eliminada en tiempo real.`);
       }
     } else {
-      console.warn('⚠️ Evento DELETE recibido pero payload.old no contiene id. Verifica REPLICA IDENTITY FULL en la tabla rutas.');
+      console.warn('⚠️ Evento DELETE recibido pero no se pudo extraer un ID válido del payload:', payload);
     }
   }
 }
@@ -1056,6 +1243,7 @@ function asegurarConductoresDesdeRutas() {
   rutas.forEach(r => {
     const nombre = (r.conductor || r.chofer || '').trim();
     if (!nombre || nombre === 'Sin conductor' || nombre === 'General') return;
+    if (typeof conductoresEliminadosSet !== 'undefined' && conductoresEliminadosSet.has(nombre.toLowerCase())) return;
     conductoresEnRutas.add(nombre.toLowerCase());
 
     const existe = listaConductores.some(ch => ch.nombre && ch.nombre.trim().toLowerCase() === nombre.toLowerCase());
@@ -1112,7 +1300,7 @@ function sincronizarServicioActivoDesdeRealtime(nuevoRegistro, rutaLocal) {
       const cam = camiones.find(v => v.matricula === vehiculoMat);
       if (cam) cam.estado = `Ocupado por ${conductorNombre}`;
     }
-  } else if (nuevoRegistro.estado === 'completada' || nuevoRegistro.estado === 'finalizada') {
+  } else if (nuevoRegistro.estado === 'completada' || nuevoRegistro.estado === 'finalizada' || nuevoRegistro.status === 'completed') {
     if (typeof serviciosActivos !== 'undefined' && serviciosActivos[conductorNombre]) {
       delete serviciosActivos[conductorNombre];
     }
@@ -1137,6 +1325,26 @@ function refrescarVistasRutas() {
   // 2. Planificación semanal y asignación de rutas por conductor
   try {
     if (typeof renderDiasSemana === 'function') renderDiasSemana();
+
+    // Sincronizar día activo si el panel de detalle está abierto en el móvil u otro dispositivo
+    const panelDia = document.getElementById('panel-detalle-dia');
+    if (panelDia && !panelDia.classList.contains('hidden')) {
+      if ((typeof diaSeleccionadoActual === 'undefined' || !diaSeleccionadoActual) && typeof window.diaActual !== 'undefined' && window.diaActual) {
+        diaSeleccionadoActual = window.diaActual;
+      }
+      if (!diaSeleccionadoActual) {
+        const tit = document.getElementById('titulo-dia-seleccionado');
+        if (tit && tit.innerText) {
+          const dias = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado', 'Domingo'];
+          const enc = dias.find(d => d.toUpperCase() === tit.innerText.trim().toUpperCase());
+          if (enc) {
+            diaSeleccionadoActual = enc;
+            window.diaSeleccionadoActual = enc;
+          }
+        }
+      }
+    }
+
     if (typeof renderGridConductoresAsignacion === 'function') renderGridConductoresAsignacion();
     else if (typeof renderGridChoferesAsignacion === 'function') renderGridChoferesAsignacion();
   } catch (e) { console.warn('Aviso en renderGridConductoresAsignacion:', e); }
@@ -1145,6 +1353,18 @@ function refrescarVistasRutas() {
   try {
     if (typeof renderVisualizacionRutasConductores === 'function') renderVisualizacionRutasConductores();
     else if (typeof renderVisualizacionRutasChoferes === 'function') renderVisualizacionRutasChoferes();
+
+    // Si el usuario en el móvil está dentro del panel detallado de rutas de un conductor, repintar
+    const panelDetalleRutas = document.getElementById('panel-detalle-rutas-conductor') || document.getElementById('panel-detalle-rutas-chofer');
+    if (panelDetalleRutas && !panelDetalleRutas.classList.contains('hidden')) {
+      const nombreTit = document.getElementById('detalle-conductor-nombre-titulo') || document.getElementById('detalle-chofer-nombre-titulo');
+      const nombre = (typeof conductorRutasSeleccionado !== 'undefined' && conductorRutasSeleccionado) ||
+                     (typeof choferRutasSeleccionado !== 'undefined' && choferRutasSeleccionado) ||
+                     (nombreTit ? nombreTit.innerText.trim() : '');
+      if (nombre && nombre !== 'Nombre Conductor' && typeof verDetalleRutasConductor === 'function') {
+        verDetalleRutasConductor(nombre);
+      }
+    }
 
     if (typeof actualizarSelectPortalConductores === 'function') actualizarSelectPortalConductores();
     else if (typeof actualizarSelectPortalChoferes === 'function') actualizarSelectPortalChoferes();
@@ -1314,7 +1534,7 @@ async function migrarRepostajesInicialesASupabase() {
     const filasParaInsertar = repostajes.map(r => ({
       fecha: r.fecha || new Date().toISOString().split('T')[0],
       camion: r.camion || '',
-      conductor: r.conductor || r.chofer || 'General',
+      chofer: r.chofer || r.conductor || 'General',
       litros: parseFloat(r.litros || 0) || 0,
       euros: parseFloat(r.euros || 0) || 0,
       km: r.km ? (parseFloat(r.km) || null) : null,
@@ -1327,14 +1547,14 @@ async function migrarRepostajesInicialesASupabase() {
       .insert(filasParaInsertar)
       .select();
 
-    // Si la columna en Postgres es 'chofer' en vez de 'conductor' (Postgres 42703)
-    if (error && error.code === '42703' && error.message && error.message.includes('conductor')) {
-      const filasChofer = filasParaInsertar.map(f => {
-        const copy = { ...f, chofer: f.conductor };
-        delete copy.conductor;
+    // Si la columna en Supabase fuera 'conductor' en vez de 'chofer'
+    if (error && (error.code === 'PGRST204' || error.code === '42703' || (error.message && error.message.includes('chofer')))) {
+      const filasConductor = filasParaInsertar.map(f => {
+        const copy = { ...f, conductor: f.chofer };
+        delete copy.chofer;
         return copy;
       });
-      const retry = await _supabase.from('repostajes').insert(filasChofer).select();
+      const retry = await _supabase.from('repostajes').insert(filasConductor).select();
       data = retry.data;
       error = retry.error;
     }
@@ -1356,7 +1576,7 @@ async function migrarRepostajesInicialesASupabase() {
 async function insertarRepostajeSupabase({ fecha, camion, conductor, chofer, litros, euros, km, adblue, tipo = 'Gasoil' }) {
   const f = fecha || new Date().toISOString().split('T')[0];
   const cam = (camion || '').trim();
-  const cond = (conductor || chofer || '').trim() || 'General';
+  const cond = (chofer || conductor || '').trim() || 'General';
   const lit = String(litros || '0');
   const eur = String(euros || '0');
   const k = (km !== undefined && km !== null && km !== '') ? String(km) : '';
@@ -1392,10 +1612,11 @@ async function insertarRepostajeSupabase({ fecha, camion, conductor, chofer, lit
   }
 
   try {
+    // La columna oficial en la tabla 'repostajes' de Supabase es 'chofer'
     const payload = {
       fecha: f,
       camion: cam,
-      conductor: cond,
+      chofer: cond,
       litros: parseFloat(lit) || 0,
       euros: parseFloat(eur) || 0,
       km: k ? (parseFloat(k) || null) : null,
@@ -1403,37 +1624,37 @@ async function insertarRepostajeSupabase({ fecha, camion, conductor, chofer, lit
       tipo: tip
     };
 
-    console.log('🚀 Insertando repostaje asíncrono en Supabase:', payload);
+    console.log('🚀 Insertando repostaje asíncrono en Supabase (tabla "repostajes"):', payload);
 
     let { data, error } = await _supabase
       .from('repostajes')
       .insert([payload])
       .select();
 
-    // Si Postgres no tiene columna conductor (42703), reintentar con 'chofer'
-    if (error && error.code === '42703' && error.message && error.message.includes('conductor')) {
-      console.warn('⚠️ Columna "conductor" no detectada en "repostajes", reintentando con "chofer"...');
-      const payloadChofer = { ...payload, chofer: cond };
-      delete payloadChofer.conductor;
-      const retry = await _supabase.from('repostajes').insert([payloadChofer]).select();
+    // Fallback si la columna en la BD se llamara 'conductor' en lugar de 'chofer'
+    if (error && (error.code === 'PGRST204' || error.code === '42703' || (error.message && error.message.includes('chofer')))) {
+      console.warn('⚠️ Columna "chofer" no detectada en "repostajes", reintentando con "conductor"...');
+      const payloadConductor = { ...payload, conductor: cond };
+      delete payloadConductor.chofer;
+      const retry = await _supabase.from('repostajes').insert([payloadConductor]).select();
       data = retry.data;
       error = retry.error;
     }
 
-    // Si falló por alguna columna opcional inexistente en Postgres (código 42703), reintentar con campos base
-    if (error && (error.code === '42703' || (error.message && (error.message.includes('adblue') || error.message.includes('tipo') || error.message.includes('km'))))) {
+    // Fallback: Si falló por alguna columna opcional inexistente en Postgres
+    if (error && (error.code === 'PGRST204' || error.code === '42703' || (error.message && (error.message.includes('adblue') || error.message.includes('tipo') || error.message.includes('km'))))) {
       console.warn('⚠️ Columnas opcionales no detectadas en tabla "repostajes". Reintentando con esquema mínimo...');
       const payloadMin = {
         fecha: f,
         camion: cam,
-        conductor: cond,
+        chofer: cond,
         litros: parseFloat(lit) || 0,
         euros: parseFloat(eur) || 0
       };
       let retry = await _supabase.from('repostajes').insert([payloadMin]).select();
-      if (retry.error && retry.error.code === '42703' && retry.error.message && retry.error.message.includes('conductor')) {
-        delete payloadMin.conductor;
-        payloadMin.chofer = cond;
+      if (retry.error && (retry.error.code === 'PGRST204' || retry.error.code === '42703' || (retry.error.message && retry.error.message.includes('chofer')))) {
+        delete payloadMin.chofer;
+        payloadMin.conductor = cond;
         retry = await _supabase.from('repostajes').insert([payloadMin]).select();
       }
       data = retry.data;
@@ -1710,6 +1931,813 @@ function refrescarVistasRepostajes() {
   }
 }
 
+/* ==========================================================================
+   SINCRONIZACIÓN Y TIEMPO REAL DE LA TABLA "conductores"
+   ========================================================================== */
+
+/**
+ * Normaliza un registro de conductor proveniente de Supabase al formato que utiliza la aplicación en memoria.
+ * Mapea las columnas de la tabla independiente ("Nombre Completo", "DNI / NIE", "Teléfono Móvil")
+ * y asegura compatibilidad bidireccional con las propiedades locales ('nombre', 'dni', 'telefono').
+ */
+function mapearConductorDesdeSupabase(c) {
+  if (!c) return null;
+
+  const nombreFinal = (c['Nombre Completo'] || c.nombre || c.nombre_completo || c.Nombre || 'Conductor').toString().trim();
+  const dniFinal = (c['DNI / NIE'] || c['DNI/NIE'] || c.dni || c.dni_nie || c['DNI'] || '').toString().trim();
+  const telFinal = (c['Teléfono Móvil'] || c['Telefono Movil'] || c['telefono_movil'] || c.telefono || c['Telefono'] || '').toString().trim();
+  const fotoFinal = (c.foto && typeof esFotoValida === 'function' && esFotoValida(c.foto)) ? c.foto : (c.Foto && typeof esFotoValida === 'function' && esFotoValida(c.Foto) ? c.Foto : '');
+
+  return {
+    id: c.id,
+    created_at: c.created_at || new Date().toISOString(),
+    nombre: nombreFinal,
+    'Nombre Completo': nombreFinal,
+    dni: dniFinal,
+    'DNI / NIE': dniFinal,
+    telefono: telFinal,
+    'Teléfono Móvil': telFinal,
+    foto: fotoFinal
+  };
+}
+
+/**
+ * 1. SELECT: Obtener todos los conductores desde la tabla "conductores" de Supabase al iniciar la aplicación
+ */
+async function cargarConductoresDesdeSupabase() {
+  if (!_supabase) {
+    console.warn('⚠️ Supabase no disponible para cargar conductores.');
+    return;
+  }
+
+  try {
+    const { data, error } = await _supabase
+      .from('conductores')
+      .select('*')
+      .order('id', { ascending: true });
+
+    if (error) {
+      if (error.code === 'PGRST205' || (error.message && error.message.includes('schema cache'))) {
+        console.warn('ℹ️ La tabla "conductores" aún no está disponible en el panel de Supabase. Operando con datos locales temporalmente.');
+        return;
+      }
+      if (error.code === '42501' || (error.message && error.message.includes('row-level security')) || error.code === 'PGRST301') {
+        console.warn('ℹ️ Políticas RLS activas en tabla "conductores". Manteniendo datos locales en memoria:', error.message);
+        return;
+      }
+      console.error('❌ Error al consultar conductores en Supabase:', error.message);
+      return;
+    }
+
+    if (data && Array.isArray(data)) {
+      if (data.length > 0) {
+        console.log(`✓ ${data.length} conductores cargados exitosamente desde Supabase:`, data);
+        const mapeados = data.map(mapearConductorDesdeSupabase).filter(Boolean);
+        conductores = mapeados;
+        window.conductores = conductores;
+        window.choferes = conductores;
+        if (typeof guardarDatosEnLocal === 'function') guardarDatosEnLocal();
+      } else {
+        console.log('Tabla "conductores" en Supabase vacía. Migrando conductores locales iniciales si existen...');
+        await migrarConductoresInicialesASupabase();
+      }
+      refrescarVistasConductores();
+    }
+  } catch (err) {
+    console.error('Excepción al cargar conductores desde Supabase:', err);
+  }
+}
+
+/**
+ * Migra los conductores locales iniciales a la tabla "conductores" de Supabase si está recién creada y vacía
+ */
+async function migrarConductoresInicialesASupabase() {
+  if (!_supabase || typeof conductores === 'undefined' || !Array.isArray(conductores) || conductores.length === 0) return;
+
+  try {
+    const filasParaInsertar = conductores.map(c => ({
+      'Nombre Completo': (c['Nombre Completo'] || c.nombre || 'Conductor').toString().trim(),
+      'DNI / NIE': (c['DNI / NIE'] || c.dni || '').toString().trim(),
+      'Teléfono Móvil': (c['Teléfono Móvil'] || c.telefono || '').toString().trim()
+    }));
+
+    let { data, error } = await _supabase
+      .from('conductores')
+      .insert(filasParaInsertar)
+      .select();
+
+    // Si Postgres lanza 42501 / 401 por políticas RLS activas en Supabase
+    if (error && (error.code === '42501' || (error.message && error.message.includes('row-level security')) || error.code === 'PGRST301')) {
+      console.warn('ℹ️ [RLS Activo en Supabase] La tabla "conductores" requiere política de INSERT para anon o desactivar RLS. Operando con conductores locales.');
+      return;
+    }
+
+    // Si Postgres lanza 42703 (columna inexistente por variaciones en el nombre de columna), reintentar con estándar en minúsculas
+    if (error && error.code === '42703') {
+      const filasAlt = conductores.map(c => ({
+        nombre: (c.nombre || c['Nombre Completo'] || 'Conductor').toString().trim(),
+        dni: (c.dni || c['DNI / NIE'] || '').toString().trim(),
+        telefono: (c.telefono || c['Teléfono Móvil'] || '').toString().trim()
+      }));
+      const retry = await _supabase.from('conductores').insert(filasAlt).select();
+      data = retry.data;
+      error = retry.error;
+    }
+
+    if (!error && data && data.length > 0) {
+      console.log(`✓ ${data.length} conductores iniciales migrados exitosamente a Supabase.`);
+      conductores = data.map(mapearConductorDesdeSupabase).filter(Boolean);
+      window.conductores = conductores;
+      window.choferes = conductores;
+      if (typeof guardarDatosEnLocal === 'function') guardarDatosEnLocal();
+    }
+  } catch (e) {
+    console.error('Error durante la migración de conductores a Supabase:', e);
+  }
+}
+
+/**
+ * 2. INSERT: Registrar un nuevo conductor en la tabla "conductores" de Supabase de forma asíncrona
+ */
+async function insertarConductorSupabase(conductorData) {
+  if (!conductorData) return null;
+
+  const nombre = (conductorData['Nombre Completo'] || conductorData.nombre || '').toString().trim();
+  const dni = (conductorData['DNI / NIE'] || conductorData.dni || '').toString().trim();
+  const telefono = (conductorData['Teléfono Móvil'] || conductorData.telefono || '').toString().trim();
+  const foto = (conductorData.foto && (typeof esFotoValida !== 'function' || esFotoValida(conductorData.foto))) ? conductorData.foto : '';
+
+  // 1. Inserción optimista en memoria local para respuesta instantánea en la interfaz
+  const tempId = 'temp_cond_' + Date.now() + '_' + Math.random().toString(36).substr(2, 5);
+  const nuevoLocal = {
+    id: tempId,
+    created_at: new Date().toISOString(),
+    nombre: nombre,
+    'Nombre Completo': nombre,
+    dni: dni,
+    'DNI / NIE': dni,
+    telefono: telefono,
+    'Teléfono Móvil': telefono,
+    foto: foto
+  };
+
+  let lista = (typeof window.conductores !== 'undefined' && Array.isArray(window.conductores))
+    ? window.conductores
+    : ((typeof conductores !== 'undefined' && Array.isArray(conductores)) ? conductores : []);
+
+  // Evitar duplicados si fue agregado con ID temporal
+  const idxExistente = lista.findIndex(c => 
+    (c.id && c.id === conductorData.id) ||
+    (c.nombre && c.nombre.trim().toLowerCase() === nombre.toLowerCase())
+  );
+
+  if (idxExistente !== -1) {
+    lista[idxExistente] = { ...lista[idxExistente], ...nuevoLocal, id: lista[idxExistente].id || tempId };
+  } else {
+    lista.push(nuevoLocal);
+  }
+
+  window.conductores = lista;
+  window.choferes = lista;
+  if (typeof conductores !== 'undefined') {
+    try { conductores = lista; } catch (e) {}
+  }
+  if (typeof choferes !== 'undefined') {
+    try { choferes = lista; } catch (e) {}
+  }
+  if (typeof guardarDatosEnLocal === 'function') guardarDatosEnLocal();
+  refrescarVistasConductores();
+
+  if (!_supabase) {
+    console.warn('⚠️ Supabase no disponible; el conductor se guardó únicamente en local.');
+    return { data: [nuevoLocal], error: null, id: nuevoLocal.id, ...nuevoLocal };
+  }
+
+  try {
+    // Columnas exactas de la tabla: "Nombre Completo", "DNI / NIE", "Teléfono Móvil"
+    const payload = {
+      'Nombre Completo': nombre,
+      'DNI / NIE': dni,
+      'Teléfono Móvil': telefono
+    };
+
+    console.log('🚀 Insertando conductor asíncrono en Supabase ("conductores"):', payload);
+
+    let { data, error } = await _supabase
+      .from('conductores')
+      .insert([payload])
+      .select();
+
+    // Si Postgres falla por nombre de columna (código 42703), reintentar con variantes minúsculas
+    if (error && error.code === '42703') {
+      console.warn('⚠️ Columnas exactas con espacios no detectadas en tabla "conductores". Reintentando con formato alternativo...');
+      const payloadAlt = {
+        nombre: nombre,
+        dni: dni,
+        telefono: telefono
+      };
+      const retry = await _supabase.from('conductores').insert([payloadAlt]).select();
+      data = retry.data;
+      error = retry.error;
+    }
+
+    if (error) {
+      console.error('❌ Error al insertar conductor en Supabase:', error.message);
+      if (typeof mostrarToastLogistica === 'function') {
+        if (error.code === 'PGRST205') {
+          mostrarToastLogistica('⚠️ Falta crear la tabla "conductores" en Supabase. Guardado localmente.');
+        } else if (error.code === '42501' || (error.message && error.message.includes('row-level security'))) {
+          mostrarToastLogistica('⚠️ RLS activo en "conductores". Guardado localmente. Revisa las políticas en Supabase.');
+        } else {
+          mostrarToastLogistica(`⚠️ Error en Supabase al registrar conductor: ${error.message}`);
+        }
+      }
+      return { data: [nuevoLocal], error, id: nuevoLocal.id, ...nuevoLocal };
+    }
+
+    if (data && data[0]) {
+      const creado = data[0];
+      const mapeado = mapearConductorDesdeSupabase(creado);
+      if (foto) mapeado.foto = foto;
+
+      // Reemplazar el registro optimista temporal con el ID definitivo asignado por Supabase
+      const idxTemp = lista.findIndex(c => String(c.id) === String(tempId) || (c.nombre && c.nombre.trim().toLowerCase() === nombre.toLowerCase()));
+      if (idxTemp !== -1) {
+        lista[idxTemp] = mapeado;
+      } else {
+        lista.push(mapeado);
+      }
+
+      window.conductores = lista;
+      window.choferes = lista;
+      if (typeof conductores !== 'undefined') {
+        try { conductores = lista; } catch (e) {}
+      }
+      if (typeof choferes !== 'undefined') {
+        try { choferes = lista; } catch (e) {}
+      }
+
+      if (typeof guardarDatosEnLocal === 'function') guardarDatosEnLocal();
+      refrescarVistasConductores();
+      console.log('✓ Conductor confirmado e insertado en tabla "conductores" de Supabase con ID:', creado.id);
+      return { data: [creado], error: null, id: creado.id, ...mapeado };
+    }
+  } catch (err) {
+    console.error('Excepción al insertar conductor en Supabase:', err);
+  }
+
+  return { data: [nuevoLocal], error: null, id: nuevoLocal.id, ...nuevoLocal };
+}
+
+/**
+ * 3. UPDATE: Actualizar datos de un conductor existente en la tabla "conductores" de Supabase
+ */
+async function actualizarConductorSupabase(conductorData, nombreAnterior = null) {
+  if (!conductorData) return null;
+
+  const id = conductorData.id;
+  const nombre = (conductorData['Nombre Completo'] || conductorData.nombre || '').toString().trim();
+  const dni = (conductorData['DNI / NIE'] || conductorData.dni || '').toString().trim();
+  const telefono = (conductorData['Teléfono Móvil'] || conductorData.telefono || '').toString().trim();
+  const foto = (conductorData.foto && (typeof esFotoValida !== 'function' || esFotoValida(conductorData.foto))) ? conductorData.foto : '';
+
+  // 1. Actualización optimista inmediata en memoria local
+  let lista = (typeof window.conductores !== 'undefined' && Array.isArray(window.conductores))
+    ? window.conductores
+    : ((typeof conductores !== 'undefined' && Array.isArray(conductores)) ? conductores : []);
+
+  let idx = -1;
+  if (id !== undefined && id !== null && String(id).trim() !== '') {
+    idx = lista.findIndex(c => String(c.id) === String(id));
+  }
+  if (idx === -1 && nombreAnterior) {
+    idx = lista.findIndex(c => c.nombre && c.nombre.trim().toLowerCase() === String(nombreAnterior).trim().toLowerCase());
+  }
+  if (idx === -1 && nombre) {
+    idx = lista.findIndex(c => c.nombre && c.nombre.trim().toLowerCase() === nombre.toLowerCase());
+  }
+
+  if (idx !== -1) {
+    lista[idx] = {
+      ...lista[idx],
+      ...conductorData,
+      nombre: nombre,
+      'Nombre Completo': nombre,
+      dni: dni,
+      'DNI / NIE': dni,
+      telefono: telefono,
+      'Teléfono Móvil': telefono,
+      foto: foto || lista[idx].foto || ''
+    };
+    window.conductores = lista;
+    window.choferes = lista;
+    if (typeof conductores !== 'undefined') {
+      try { conductores = lista; } catch (e) {}
+    }
+    if (typeof choferes !== 'undefined') {
+      try { choferes = lista; } catch (e) {}
+    }
+    if (typeof guardarDatosEnLocal === 'function') guardarDatosEnLocal();
+    refrescarVistasConductores();
+  }
+
+  if (!_supabase) {
+    console.warn('⚠️ Supabase no disponible; actualización guardada únicamente en local.');
+    return { data: [conductorData], error: null };
+  }
+
+  try {
+    const payload = {
+      'Nombre Completo': nombre,
+      'DNI / NIE': dni,
+      'Teléfono Móvil': telefono
+    };
+
+    console.log(`📡 Enviando UPDATE a tabla "conductores" en Supabase:`, { id, payload });
+
+    const esIdValido = id !== undefined && id !== null && !String(id).startsWith('temp_cond_') && !String(id).startsWith('local_');
+
+    let query = null;
+    if (esIdValido) {
+      query = _supabase.from('conductores').update(payload).eq('id', id);
+    } else if (nombreAnterior) {
+      query = _supabase.from('conductores').update(payload).eq('Nombre Completo', nombreAnterior);
+    } else {
+      query = _supabase.from('conductores').update(payload).eq('Nombre Completo', nombre);
+    }
+
+    let { data, error } = await query.select();
+
+    // Si Postgres falla por nombre de columna (código 42703), reintentar con variantes minúsculas
+    if (error && error.code === '42703') {
+      console.warn('⚠️ Columnas exactas con espacios no detectadas en UPDATE. Reintentando con minúsculas...');
+      const payloadAlt = { nombre, dni, telefono };
+      let queryAlt = null;
+      if (esIdValido) {
+        queryAlt = _supabase.from('conductores').update(payloadAlt).eq('id', id);
+      } else if (nombreAnterior) {
+        queryAlt = _supabase.from('conductores').update(payloadAlt).eq('nombre', nombreAnterior);
+      } else {
+        queryAlt = _supabase.from('conductores').update(payloadAlt).eq('nombre', nombre);
+      }
+      const retry = await queryAlt.select();
+      data = retry.data;
+      error = retry.error;
+    }
+
+    if (error) {
+      console.error('❌ Error al actualizar conductor en Supabase:', error.message);
+      return { data: null, error };
+    }
+
+    if (data && data[0]) {
+      const mapeado = mapearConductorDesdeSupabase(data[0]);
+      if (foto) mapeado.foto = foto;
+      if (idx !== -1) {
+        lista[idx] = mapeado;
+        window.conductores = lista;
+        window.choferes = lista;
+        if (typeof guardarDatosEnLocal === 'function') guardarDatosEnLocal();
+        refrescarVistasConductores();
+      }
+      console.log('✓ Conductor confirmado y actualizado en tabla "conductores" de Supabase:', data[0]);
+      return { data, error: null, id: data[0].id, ...mapeado };
+    }
+  } catch (err) {
+    console.error('Excepción al actualizar conductor en Supabase:', err);
+    return { data: null, error: err };
+  }
+
+  return { data: [conductorData], error: null };
+}
+
+/**
+ * 4. DELETE: Eliminar un registro de la tabla "conductores" en Supabase de forma asíncrona
+ */
+async function eliminarConductorSupabase(idDelRegistro, nombre = null) {
+  if (!idDelRegistro && !nombre) {
+    return { success: false, error: new Error('ID o Nombre no especificado') };
+  }
+
+  if (idDelRegistro && String(idDelRegistro).startsWith('temp_cond_')) {
+    return { success: true };
+  }
+
+  if (!_supabase) {
+    return { success: true };
+  }
+
+  try {
+    console.log(`🗑️ Eliminando conductor de la tabla "conductores" en Supabase...`, { id: idDelRegistro, nombre });
+
+    let query = null;
+    const esIdValido = idDelRegistro !== undefined && idDelRegistro !== null && !String(idDelRegistro).startsWith('local_') && !String(idDelRegistro).startsWith('temp_');
+
+    if (esIdValido) {
+      query = _supabase.from('conductores').delete().eq('id', idDelRegistro);
+    } else if (nombre) {
+      query = _supabase.from('conductores').delete().eq('Nombre Completo', nombre);
+    } else {
+      return { success: false, error: new Error('Identificador no válido') };
+    }
+
+    let { error } = await query;
+
+    // Si falla por 42703 (por ejemplo 'Nombre Completo' no reconocido), reintentar con 'nombre'
+    if (error && error.code === '42703' && nombre) {
+      const retry = await _supabase.from('conductores').delete().eq('nombre', nombre);
+      error = retry.error;
+    }
+
+    if (error) {
+      console.error(`❌ Error al eliminar conductor en Supabase:`, error.message);
+      return { success: false, error };
+    }
+
+    console.log(`✓ Conductor eliminado exitosamente de la tabla "conductores" en Supabase.`);
+    return { success: true };
+  } catch (err) {
+    console.error(`❌ Excepción al eliminar conductor en Supabase:`, err);
+    return { success: false, error: err };
+  }
+}
+
+/**
+ * 5. REALTIME: Suscribirse a cambios en tiempo real en la tabla "conductores"
+ * Configura el canal "bugamed-conductores-realtime" escuchando todos los eventos:
+ * { event: '*', schema: 'public', table: 'conductores' }
+ */
+function suscribirConductoresRealtime() {
+  if (!_supabase) {
+    console.warn('⚠️ Cliente Supabase no disponible para Realtime de conductores.');
+    return null;
+  }
+
+  // 1. Eliminar canal previo si existía para evitar listeners duplicados
+  if (canalRealtimeConductores) {
+    console.log('🔄 Removiendo canal Realtime de conductores previo antes de reconectar...');
+    try {
+      _supabase.removeChannel(canalRealtimeConductores);
+    } catch (e) {
+      console.warn('Error al remover canal Realtime anterior de conductores:', e);
+    }
+    canalRealtimeConductores = null;
+  }
+
+  console.log('📡 Conectando canal Realtime "bugamed-conductores-realtime" para tabla "conductores" con { event: "*" }...');
+
+  // 2. Crear y suscribirse al canal específico de la tabla conductores
+  canalRealtimeConductores = _supabase
+    .channel('bugamed-conductores-realtime')
+    .on(
+      'postgres_changes',
+      { event: '*', schema: 'public', table: 'conductores' },
+      (payload) => {
+        console.log(`👤 [Realtime Conductores] Evento detectado [${payload?.eventType || payload?.type || '*'}] en tabla "conductores":`, payload);
+        procesarEventoRealtimeConductores(payload);
+      }
+    )
+    .subscribe((status, err) => {
+      console.log('📡 Estado de conexión Realtime Conductores:', status);
+      if (err) {
+        console.error('❌ Error en canal Realtime Conductores:', err);
+      }
+      if (status === 'SUBSCRIBED') {
+        console.log('✅ [Realtime Conductores] Canal suscrito exitosamente (SUBSCRIBED). Conductores sincronizados en vivo.');
+      } else if (status === 'CLOSED' || status === 'CHANNEL_ERROR') {
+        console.warn('⚠️ [Realtime Conductores] Canal cerrado o con error:', status);
+      }
+    });
+
+  window.canalRealtimeConductores = canalRealtimeConductores;
+  return canalRealtimeConductores;
+}
+
+/**
+ * 6. EVENT HANDLER: Procesa los eventos entrantes de Supabase Realtime para la tabla "conductores" (INSERT, UPDATE, DELETE).
+ * Actualiza el array local de conductores al instante y vuelve a dibujar la interfaz en todos los dispositivos conectados sin recargar la página.
+ */
+function procesarEventoRealtimeConductores(payload) {
+  if (!payload) return;
+
+  const eventType = (payload.eventType || payload.type || payload.event || '').toUpperCase();
+  const nuevoRegistro = payload.new || payload.record;
+  const viejoRegistro = payload.old || payload.old_record || {};
+
+  console.log(`⚡ [Realtime Conductores] Procesando evento [${eventType}] en tabla "conductores":`, {
+    nuevo: nuevoRegistro,
+    viejo: viejoRegistro
+  });
+
+  // Asegurar referencia unificada en window.conductores y variable de ámbito
+  let lista = (typeof window.conductores !== 'undefined' && Array.isArray(window.conductores))
+    ? window.conductores
+    : ((typeof conductores !== 'undefined' && Array.isArray(conductores)) ? conductores : []);
+
+  // =========================================================================
+  // GESTIÓN DEL EVENTO INSERT
+  // =========================================================================
+  if (eventType === 'INSERT') {
+    if (!nuevoRegistro || nuevoRegistro.id === undefined) return;
+
+    const mapeado = mapearConductorDesdeSupabase(nuevoRegistro);
+    const nuevoId = String(nuevoRegistro.id);
+    const nombreNuevo = mapeado.nombre;
+
+    // 1. Comprobar si reemplaza un registro optimista local pendiente
+    const tempIndex = lista.findIndex(c => 
+      String(c.id).startsWith('temp_cond_') &&
+      c.nombre && c.nombre.trim().toLowerCase() === nombreNuevo.toLowerCase()
+    );
+
+    // 2. Comprobar si ya existe por ID o por Nombre
+    const indexExistenteId = lista.findIndex(c => String(c.id) === nuevoId);
+    const indexExistenteNombre = lista.findIndex(c => c.nombre && c.nombre.trim().toLowerCase() === nombreNuevo.toLowerCase());
+
+    if (tempIndex !== -1) {
+      if (!mapeado.foto && lista[tempIndex].foto) mapeado.foto = lista[tempIndex].foto;
+      lista[tempIndex] = mapeado;
+      console.log(`✓ Conductor temporal local confirmado con ID Supabase: ${nuevoId}`);
+    } else if (indexExistenteId !== -1) {
+      if (!mapeado.foto && lista[indexExistenteId].foto) mapeado.foto = lista[indexExistenteId].foto;
+      lista[indexExistenteId] = mapeado;
+      console.log(`✓ Conductor existente ${nuevoId} actualizado tras INSERT`);
+    } else if (indexExistenteNombre !== -1) {
+      if (!mapeado.foto && lista[indexExistenteNombre].foto) mapeado.foto = lista[indexExistenteNombre].foto;
+      lista[indexExistenteNombre] = mapeado;
+      console.log(`✓ Conductor ${nombreNuevo} sincronizado con nuevo ID Supabase: ${nuevoId}`);
+    } else {
+      lista.push(mapeado);
+      console.log(`✓ Nuevo conductor recibido en tiempo real: ${mapeado.nombre} (${mapeado.telefono})`);
+      if (typeof mostrarToastLogistica === 'function') {
+        mostrarToastLogistica(`👤 Nuevo conductor en vivo: ${mapeado.nombre}`);
+      }
+    }
+
+    // Sincronizar array local en memoria y almacenamiento
+    window.conductores = lista;
+    window.choferes = lista;
+    if (typeof conductores !== 'undefined') {
+      try { conductores = lista; } catch (e) {}
+    }
+    if (typeof choferes !== 'undefined') {
+      try { choferes = lista; } catch (e) {}
+    }
+    if (typeof guardarDatosEnLocal === 'function') guardarDatosEnLocal();
+
+    // Re-renderizado reactivo inmediato de la interfaz en todos los dispositivos
+    refrescarVistasConductores();
+
+  // =========================================================================
+  // GESTIÓN DEL EVENTO UPDATE
+  // =========================================================================
+  } else if (eventType === 'UPDATE') {
+    if (!nuevoRegistro) return;
+
+    const mapeado = mapearConductorDesdeSupabase(nuevoRegistro);
+    const idModificado = nuevoRegistro.id;
+    let index = -1;
+
+    if (idModificado !== undefined && idModificado !== null && idModificado !== '') {
+      index = lista.findIndex(c => String(c.id) === String(idModificado));
+    }
+
+    // Fallbacks si el registro local no tenía el ID exacto
+    if (index === -1 && mapeado.dni) {
+      index = lista.findIndex(c => c.dni && c.dni.trim().toLowerCase() === mapeado.dni.toLowerCase());
+    }
+    if (index === -1 && mapeado.nombre) {
+      index = lista.findIndex(c => c.nombre && c.nombre.trim().toLowerCase() === mapeado.nombre.toLowerCase());
+    }
+
+    if (index !== -1) {
+      const nombreAnterior = lista[index].nombre;
+      const nombreNuevo = mapeado.nombre;
+
+      if (!mapeado.foto && lista[index].foto) {
+        mapeado.foto = lista[index].foto;
+      }
+
+      lista[index] = {
+        ...lista[index],
+        ...mapeado
+      };
+
+      console.log(`✓ [UPDATE Realtime] Conductor ID ${idModificado} modificado en vivo:`, {
+        nombre: lista[index].nombre,
+        dni: lista[index].dni,
+        telefono: lista[index].telefono
+      });
+
+      // Si el nombre del conductor fue modificado, propagar a las rutas locales
+      if (nombreAnterior && nombreNuevo && nombreAnterior !== nombreNuevo) {
+        if (typeof sincronizarCambioNombreConductorLocal === 'function') {
+          sincronizarCambioNombreConductorLocal(nombreAnterior, nombreNuevo);
+        }
+      }
+    } else {
+      lista.push(mapeado);
+      console.log(`✓ [UPDATE Realtime] Conductor ID ${idModificado} añadido al array:`, mapeado);
+    }
+
+    // Sincronizar array local en memoria y almacenamiento
+    window.conductores = lista;
+    window.choferes = lista;
+    if (typeof conductores !== 'undefined') {
+      try { conductores = lista; } catch (e) {}
+    }
+    if (typeof choferes !== 'undefined') {
+      try { choferes = lista; } catch (e) {}
+    }
+    if (typeof guardarDatosEnLocal === 'function') guardarDatosEnLocal();
+
+    // Re-renderizado reactivo inmediato de la interfaz
+    refrescarVistasConductores();
+
+    if (typeof mostrarToastLogistica === 'function') {
+      mostrarToastLogistica(`⚡ Datos de "${mapeado.nombre}" actualizados en vivo`);
+    }
+
+  // =========================================================================
+  // GESTIÓN DEL EVENTO DELETE
+  // =========================================================================
+  } else if (eventType === 'DELETE' || (!eventType && (viejoRegistro?.id || payload.old?.id))) {
+    // 1. Extraer ID del conductor eliminado de forma robusta y directa desde payload.old.id
+    const idEliminar = payload.old?.id ?? viejoRegistro?.id ?? payload.old_record?.id ?? payload.id ?? null;
+    const nombreEliminar = payload.old?.['Nombre Completo'] ?? payload.old?.nombre ?? viejoRegistro?.['Nombre Completo'] ?? viejoRegistro?.nombre ?? payload.old_record?.['Nombre Completo'] ?? payload.old_record?.nombre ?? null;
+
+    console.log(`🗑️ [Realtime Conductores] Evento DELETE recibido para ID:`, idEliminar, payload);
+
+    if (idEliminar === null && idEliminar === undefined && !nombreEliminar) {
+      console.warn('⚠️ Evento DELETE en tabla "conductores" recibido sin ID identificable:', payload);
+      return;
+    }
+
+    const idEliminarStr = (idEliminar !== null && idEliminar !== undefined) ? String(idEliminar).trim() : '';
+    const idEliminarNum = Number(idEliminar);
+    const esNumeroValido = !isNaN(idEliminarNum) && idEliminarStr !== '';
+    const nomNorm = nombreEliminar ? String(nombreEliminar).trim().toLowerCase() : '';
+
+    let nombreEliminado = nombreEliminar || null;
+
+    // Función auxiliar para eliminar el conductor in-place mediante splice buscando por ID o Nombre
+    const eliminarDeArray = (arr) => {
+      if (!Array.isArray(arr)) return 0;
+      let count = 0;
+      for (let i = arr.length - 1; i >= 0; i--) {
+        const c = arr[i];
+        if (!c) continue;
+        const cIdStr = (c.id !== undefined && c.id !== null) ? String(c.id).trim() : '';
+        const cIdNum = Number(c.id);
+        const coincideId = idEliminarStr !== '' && (cIdStr === idEliminarStr || (esNumeroValido && !isNaN(cIdNum) && cIdNum === idEliminarNum));
+        const coincideNombre = nomNorm !== '' && c.nombre && c.nombre.trim().toLowerCase() === nomNorm;
+
+        if (coincideId || coincideNombre) {
+          if (!nombreEliminado && c.nombre) {
+            nombreEliminado = c.nombre;
+          }
+          arr.splice(i, 1);
+          count++;
+        }
+      }
+      return count;
+    };
+
+    // 2. Eliminar del array local de conductores in-place en todas las referencias globales y de ámbito
+    let totalEliminados = 0;
+    if (typeof window !== 'undefined' && Array.isArray(window.conductores)) {
+      totalEliminados += eliminarDeArray(window.conductores);
+    }
+    if (typeof window !== 'undefined' && Array.isArray(window.choferes) && window.choferes !== window.conductores) {
+      totalEliminados += eliminarDeArray(window.choferes);
+    }
+    if (typeof conductores !== 'undefined' && Array.isArray(conductores) && conductores !== window?.conductores) {
+      totalEliminados += eliminarDeArray(conductores);
+    }
+    if (typeof choferes !== 'undefined' && Array.isArray(choferes) && choferes !== window?.choferes && choferes !== conductores) {
+      totalEliminados += eliminarDeArray(choferes);
+    }
+
+    // Sincronizar referencias unificadas
+    const listaActualizada = (typeof window !== 'undefined' && Array.isArray(window.conductores))
+      ? window.conductores
+      : ((typeof conductores !== 'undefined' && Array.isArray(conductores)) ? conductores : []);
+
+    window.conductores = listaActualizada;
+    window.choferes = listaActualizada;
+    if (typeof conductores !== 'undefined') {
+      try { conductores = listaActualizada; } catch (e) {}
+    }
+    if (typeof choferes !== 'undefined') {
+      try { choferes = listaActualizada; } catch (e) {}
+    }
+
+    if (nombreEliminado && typeof conductoresEliminadosSet !== 'undefined') {
+      conductoresEliminadosSet.add(nombreEliminado.trim().toLowerCase());
+    }
+
+    console.log(`✓ Conductor (ID: ${idEliminar}${nombreEliminado ? `, Nombre: "${nombreEliminado}"` : ''}) eliminado en tiempo real. Registros locales retirados: ${totalEliminados}`);
+
+    // Limpiar rutas asociadas en memoria local si corresponde
+    if (nombreEliminado) {
+      const nNorm = nombreEliminado.trim().toLowerCase();
+      if (typeof rutas !== 'undefined' && Array.isArray(rutas)) {
+        for (let i = rutas.length - 1; i >= 0; i--) {
+          const r = rutas[i];
+          if (r && ((r.conductor && r.conductor.trim().toLowerCase() === nNorm) || (r.chofer && r.chofer.trim().toLowerCase() === nNorm))) {
+            rutas.splice(i, 1);
+          }
+        }
+      }
+      if (typeof window !== 'undefined' && Array.isArray(window.rutas)) {
+        for (let i = window.rutas.length - 1; i >= 0; i--) {
+          const r = window.rutas[i];
+          if (r && ((r.conductor && r.conductor.trim().toLowerCase() === nNorm) || (r.chofer && r.chofer.trim().toLowerCase() === nNorm))) {
+            window.rutas.splice(i, 1);
+          }
+        }
+      }
+    }
+
+    // Guardar cambios en almacenamiento local
+    if (typeof guardarDatosEnLocal === 'function') {
+      guardarDatosEnLocal();
+    } else {
+      try {
+        localStorage.setItem('bugamed_conductores', JSON.stringify(listaActualizada));
+        localStorage.setItem('bugamed_choferes', JSON.stringify(listaActualizada));
+      } catch (e) {}
+    }
+
+    // 3. Volver a renderizar la interfaz al instante en todos los dispositivos conectados sin recargar
+    refrescarVistasConductores();
+    if (typeof refrescarVistasRutas === 'function') {
+      refrescarVistasRutas();
+    }
+    if (typeof actualizarKPIs === 'function') {
+      actualizarKPIs();
+    }
+
+    if (typeof mostrarToastLogistica === 'function') {
+      mostrarToastLogistica(`🗑️ Conductor ${nombreEliminado ? `"${nombreEliminado}"` : ''} eliminado en tiempo real.`);
+    }
+  }
+}
+
+/**
+ * 7. Re-renderiza dinámicamente todas las vistas de conductores en la interfaz:
+ * - Tarjetas de conductores/personal Bugamed (renderConductores / renderChoferes)
+ * - Cuadrícula de asignación semanal (renderGridConductoresAsignacion)
+ * - Portal y visualización de rutas de conductores (renderVisualizacionRutasConductores)
+ * - Historial de conductores (renderHistorialConductoresGrid)
+ * - Módulo de logística y selector de conductores
+ * - KPIs y filtros de combustible
+ */
+function refrescarVistasConductores() {
+  try {
+    if (typeof renderConductores === 'function') renderConductores();
+    else if (typeof renderChoferes === 'function') renderChoferes();
+  } catch (e) { console.warn('Aviso en renderConductores:', e); }
+
+  try {
+    if (typeof renderGridConductoresAsignacion === 'function') renderGridConductoresAsignacion();
+    else if (typeof renderGridChoferesAsignacion === 'function') renderGridChoferesAsignacion();
+  } catch (e) { console.warn('Aviso en renderGridConductoresAsignacion:', e); }
+
+  try {
+    if (typeof renderVisualizacionRutasConductores === 'function') renderVisualizacionRutasConductores();
+    else if (typeof renderVisualizacionRutasChoferes === 'function') renderVisualizacionRutasChoferes();
+
+    if (typeof actualizarSelectPortalConductores === 'function') actualizarSelectPortalConductores();
+    else if (typeof actualizarSelectPortalChoferes === 'function') actualizarSelectPortalChoferes();
+  } catch (e) { console.warn('Aviso en renderVisualizacionRutasConductores:', e); }
+
+  try {
+    if (typeof renderHistorialConductoresGrid === 'function') renderHistorialConductoresGrid();
+    else if (typeof renderHistorialChoferesGrid === 'function') renderHistorialChoferesGrid();
+  } catch (e) { console.warn('Aviso en renderHistorialConductoresGrid:', e); }
+
+  try {
+    if (typeof renderModuloLogistica === 'function') renderModuloLogistica();
+  } catch (e) { console.warn('Aviso en renderModuloLogistica:', e); }
+
+  try {
+    if (typeof renderAdminCombustible === 'function') renderAdminCombustible();
+  } catch (e) { console.warn('Aviso en renderAdminCombustible desde conductores:', e); }
+
+  try {
+    const modalSel = document.getElementById('modal-selector-conductores') || document.getElementById('modal-selector-choferes');
+    if (modalSel && !modalSel.classList.contains('hidden')) {
+      if (typeof abrirSelectorConductoresInicio === 'function') abrirSelectorConductoresInicio();
+      else if (typeof abrirSelectorChoferesInicio === 'function') abrirSelectorChoferesInicio();
+    }
+  } catch (e) {}
+
+  try {
+    if (typeof actualizarKPIs === 'function') actualizarKPIs();
+  } catch (e) {}
+}
+
 /**
  * Función principal de arranque de Supabase llamada al cargar la página
  */
@@ -1719,15 +2747,17 @@ async function iniciarSupabaseApp() {
     return;
   }
 
-  // 1. Cargar las rutas y repostajes remotos desde Supabase (SELECT)
-  await Promise.allSettled([
-    cargarRutasDesdeSupabase(),
-    cargarRepostajesDesdeSupabase()
-  ]);
-
-  // 2. Suscribirse a cambios en tiempo real en ambas tablas (REALTIME)
+  // 1. Suscribirse inmediatamente a cambios en tiempo real en todas las tablas (REALTIME)
   suscribirRutasRealtime();
   suscribirRepostajesRealtime();
+  suscribirConductoresRealtime();
+
+  // 2. Cargar las rutas, repostajes y conductores remotos desde Supabase (SELECT)
+  await Promise.allSettled([
+    cargarRutasDesdeSupabase(),
+    cargarRepostajesDesdeSupabase(),
+    cargarConductoresDesdeSupabase()
+  ]);
 }
 
 // Exponer funciones principales en window para acceso global
@@ -1735,6 +2765,7 @@ window.extraerClientesDePayload = extraerClientesDePayload;
 window.cargarRutasDesdeSupabase = cargarRutasDesdeSupabase;
 window.insertarRutaSupabase = insertarRutaSupabase;
 window.actualizarEstadoRutaSupabase = actualizarEstadoRutaSupabase;
+window.finalizarRutaSupabase = finalizarRutaSupabase;
 window.actualizarConductorRutaSupabase = actualizarConductorRutaSupabase;
 window.actualizarNombreConductorEnRutasSupabase = actualizarNombreConductorEnRutasSupabase;
 window.sincronizarCambioNombreConductorLocal = sincronizarCambioNombreConductorLocal;
@@ -1757,4 +2788,16 @@ window.eliminarRepostajeSupabase = eliminarRepostajeSupabase;
 window.suscribirRepostajesRealtime = suscribirRepostajesRealtime;
 window.procesarEventoRealtimeRepostajes = procesarEventoRealtimeRepostajes;
 window.refrescarVistasRepostajes = refrescarVistasRepostajes;
+
+// Exponer funciones de Conductores / Personal en window
+window.mapearConductorDesdeSupabase = mapearConductorDesdeSupabase;
+window.cargarConductoresDesdeSupabase = cargarConductoresDesdeSupabase;
+window.migrarConductoresInicialesASupabase = migrarConductoresInicialesASupabase;
+window.insertarConductorSupabase = insertarConductorSupabase;
+window.actualizarConductorSupabase = actualizarConductorSupabase;
+window.eliminarConductorSupabase = eliminarConductorSupabase;
+window.canalRealtimeConductores = canalRealtimeConductores;
+window.suscribirConductoresRealtime = suscribirConductoresRealtime;
+window.procesarEventoRealtimeConductores = procesarEventoRealtimeConductores;
+window.refrescarVistasConductores = refrescarVistasConductores;
 

@@ -699,6 +699,17 @@ window.eliminarIncidencia = function(index) {
 };
 
 /* --- CLIENTES (ADMIN) --- */
+function normalizarTipoCliente(tipo) {
+  if (!tipo) return 'Mixto';
+  const t = String(tipo).trim().toLowerCase();
+  if (t === 'hoteles' || t === 'hotel') return 'Hotel';
+  if (t === 'restaurantes' || t === 'restaurante') return 'Restaurante';
+  if (t === 'campings' || t === 'camping') return 'Camping';
+  if (t === 'mixtos' || t === 'mixto') return 'Mixto';
+  return tipo;
+}
+window.normalizarTipoCliente = normalizarTipoCliente;
+
 function renderClientes() {
   const container = document.getElementById('lista-clientes-por-zona');
   const elBusqueda = document.getElementById('buscar-cliente');
@@ -711,7 +722,7 @@ function renderClientes() {
     const coincide = c.nombre.toLowerCase().includes(textoBusqueda) ||
                      (c.zona && c.zona.toLowerCase().includes(textoBusqueda)) ||
                      (c.direccion && c.direccion.toLowerCase().includes(textoBusqueda));
-    const coincideTipo = (filtroClienteActual === 'Todos') || (c.tipo === filtroClienteActual);
+    const coincideTipo = (filtroClienteActual === 'Todos') || (normalizarTipoCliente(c.tipo) === normalizarTipoCliente(filtroClienteActual));
     return coincide && coincideTipo;
   });
 
@@ -743,17 +754,18 @@ function renderClientes() {
         <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           ${clientesZona.map(c => {
             const idxOriginal = clientes.indexOf(c);
+            const tipoNorm = normalizarTipoCliente(c.tipo);
             let badgeColor = 'bg-purple-100 text-purple-700';
-            if (c.tipo === 'Restaurantes') badgeColor = 'bg-blue-100 text-blue-700';
-            if (c.tipo === 'Mixto') badgeColor = 'bg-emerald-100 text-emerald-700';
-            if (c.tipo === 'Camping') badgeColor = 'bg-amber-100 text-amber-700';
+            if (tipoNorm === 'Restaurante') badgeColor = 'bg-blue-100 text-blue-700';
+            if (tipoNorm === 'Mixto') badgeColor = 'bg-emerald-100 text-emerald-700';
+            if (tipoNorm === 'Camping') badgeColor = 'bg-amber-100 text-amber-700';
 
             return `
               <div class="bg-slate-50 rounded-xl p-4 border border-slate-200 flex justify-between items-start gap-2 shadow-2xs hover:border-purple-300 transition-all">
                 <div class="space-y-1.5 min-w-0 flex-1">
                   <div class="flex items-center gap-1.5 flex-wrap">
                     <span class="px-2.5 py-0.5 rounded text-[10px] font-bold ${badgeColor}">
-                      ${c.tipo}
+                      ${tipoNorm}
                     </span>
                     ${c.ubicacion ? `
                       <a href="${c.ubicacion.startsWith('http') ? c.ubicacion : 'https://www.google.com/maps/dir/?api=1&destination=' + encodeURIComponent(c.ubicacion)}" target="_blank" rel="noopener noreferrer" class="inline-flex items-center gap-1 text-[10px] font-extrabold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 px-2 py-0.5 rounded border border-emerald-200 transition-colors shadow-2xs" title="Abrir ubicación en Google Maps">
@@ -783,11 +795,15 @@ function renderClientes() {
 }
 
 window.filtrarTipoCliente = function(tipo) {
-  filtroClienteActual = tipo;
-  ['Todos', 'Hoteles', 'Restaurantes', 'Mixto', 'Camping'].forEach(t => {
-    const btn = document.getElementById(`filtro-cli-${t.toLowerCase()}`);
+  filtroClienteActual = normalizarTipoCliente(tipo);
+  if (tipo === 'Todos') filtroClienteActual = 'Todos';
+
+  ['Todos', 'Hotel', 'Restaurante', 'Mixto', 'Camping'].forEach(t => {
+    const btn = document.getElementById(`filtro-cli-${t.toLowerCase()}`) || 
+                document.getElementById(`filtro-cli-${t.toLowerCase()}es`) || 
+                document.getElementById(`filtro-cli-${t.toLowerCase()}s`);
     if (btn) {
-      if (t === tipo) {
+      if (t === filtroClienteActual) {
         btn.className = "px-3 py-2 rounded-xl text-xs font-bold bg-purple-600 text-white border border-purple-600 cursor-pointer";
       } else {
         btn.className = "px-3 py-2 rounded-xl text-xs font-bold bg-slate-100 text-slate-600 border border-slate-300 hover:bg-slate-200 cursor-pointer";
@@ -823,7 +839,7 @@ window.toggleModalCliente = function(show, editIndex = null) {
 
         if (inNombre) inNombre.value = c.nombre || '';
         if (inZona) inZona.value = c.zona || '';
-        if (inTipo) inTipo.value = c.tipo || 'Hoteles';
+        if (inTipo) inTipo.value = normalizarTipoCliente(c.tipo) || 'Hotel';
         if (inDireccion) inDireccion.value = c.direccion || '';
         if (inTelefono) inTelefono.value = c.telefono || '';
         if (inUbicacion) inUbicacion.value = c.ubicacion || '';
@@ -860,7 +876,7 @@ window.agregarClienteDirecto = function(e) {
   const clienteData = {
     nombre: document.getElementById('cli-nombre')?.value.trim() || '',
     zona: document.getElementById('cli-zona')?.value.trim() || '',
-    tipo: document.getElementById('cli-tipo')?.value || 'Hoteles',
+    tipo: normalizarTipoCliente(document.getElementById('cli-tipo')?.value) || 'Hotel',
     direccion: document.getElementById('cli-direccion')?.value.trim() || '',
     telefono: document.getElementById('cli-telefono')?.value.trim() || '',
     ubicacion: document.getElementById('cli-ubicacion')?.value.trim() || ''
@@ -1062,6 +1078,8 @@ window.toggleModalConductor = function(show, editIndex = null) {
       if (inputEditIndex) inputEditIndex.value = idx;
       const ch = lista[idx];
       if (ch) {
+        const inputId = document.getElementById('conductor-id') || document.getElementById('chofer-id');
+        if (inputId) inputId.value = ch.id || '';
         const inputNom = document.getElementById('conductor-nombre') || document.getElementById('chofer-nombre');
         const inputDni = document.getElementById('conductor-dni') || document.getElementById('chofer-dni');
         const inputTel = document.getElementById('conductor-telefono') || document.getElementById('chofer-telefono');
@@ -1078,6 +1096,8 @@ window.toggleModalConductor = function(show, editIndex = null) {
       }
     } else {
       if (inputEditIndex) inputEditIndex.value = '';
+      const inputId = document.getElementById('conductor-id') || document.getElementById('chofer-id');
+      if (inputId) inputId.value = '';
       if (form) form.reset();
       const inputFoto = document.getElementById('conductor-foto-input') || document.getElementById('chofer-foto-input');
       if (inputFoto) inputFoto.value = '';
@@ -1097,6 +1117,8 @@ window.agregarConductor = async function(e) {
   if (e) e.preventDefault();
   const inputEditIndex = document.getElementById('conductor-edit-index') || document.getElementById('chofer-edit-index');
   const editIndexVal = inputEditIndex ? inputEditIndex.value : '';
+  const inputId = document.getElementById('conductor-id') || document.getElementById('chofer-id');
+  const idVal = inputId ? inputId.value : '';
 
   const inputFoto = document.getElementById('conductor-foto-input') || document.getElementById('chofer-foto-input');
   let fotoVal = (inputFoto?.value || '').trim();
@@ -1111,10 +1133,16 @@ window.agregarConductor = async function(e) {
 
   const conductorData = {
     nombre: (inputNom?.value || '').trim(),
+    'Nombre Completo': (inputNom?.value || '').trim(),
     dni: (inputDni?.value || '').trim(),
+    'DNI / NIE': (inputDni?.value || '').trim(),
     telefono: (inputTel?.value || '').trim(),
+    'Teléfono Móvil': (inputTel?.value || '').trim(),
     foto: fotoVal
   };
+  if (idVal !== '' && idVal !== null && idVal !== undefined) {
+    conductorData.id = isNaN(idVal) ? idVal : Number(idVal);
+  }
 
   if (!conductorData.nombre) {
     alert('Por favor, introduce el nombre del conductor.');
@@ -1134,9 +1162,18 @@ window.agregarConductor = async function(e) {
     if (editIndexVal !== '' && !isNaN(editIndexVal)) {
       const idx = parseInt(editIndexVal, 10);
       if (idx >= 0 && idx < listaConductores.length) {
+        if (!conductorData.id && listaConductores[idx].id) {
+          conductorData.id = listaConductores[idx].id;
+        }
         const nombreAnterior = listaConductores[idx].nombre;
         const nombreNuevo = conductorData.nombre;
-        listaConductores[idx] = conductorData;
+        listaConductores[idx] = { ...listaConductores[idx], ...conductorData };
+
+        // 1. Enviar UPDATE a Supabase (emite Realtime a los demás dispositivos en tiempo real)
+        if (typeof actualizarConductorSupabase === 'function') {
+          console.log(`📡 Enviando UPDATE de conductor a Supabase...`, conductorData);
+          await actualizarConductorSupabase(conductorData, nombreAnterior);
+        }
 
         // Si se editó el nombre del conductor, propagar el cambio a todas sus rutas en memoria y en Supabase
         if (nombreAnterior && nombreNuevo && nombreAnterior !== nombreNuevo) {
@@ -1160,56 +1197,33 @@ window.agregarConductor = async function(e) {
           } else if (typeof _supabase !== 'undefined' && _supabase) {
             await _supabase.from('rutas').update({ conductor: nombreNuevo }).eq('conductor', nombreAnterior);
           }
-
-          // Si el conductor aún no tenía rutas guardadas en Supabase, crear su registro base en la tabla rutas
-          if (totalRutasAfectadas === 0 && typeof insertarRutaSupabase === 'function') {
-            await insertarRutaSupabase({
-              conductor: nombreNuevo,
-              vehiculo: '',
-              estado: 'pendiente',
-              dia: 'Lunes',
-              clientes: [],
-              tipoCliente: 'Mixto'
-            });
-          }
-        }
-      } else {
-        listaConductores.push(conductorData);
-        // Persistir en tabla rutas de Supabase con la columna conductor
-        if (typeof insertarRutaSupabase === 'function') {
-          await insertarRutaSupabase({
-            conductor: conductorData.nombre,
-            vehiculo: '',
-            estado: 'pendiente',
-            dia: 'Lunes',
-            clientes: [],
-            tipoCliente: 'Mixto'
-          });
         }
       }
     } else {
-      listaConductores.push(conductorData);
-      // Al crear un nuevo conductor, guardarlo en la tabla principal "rutas" de Supabase
-      // Esto dispara el evento Realtime 'INSERT' a todos los dispositivos conectados
-      console.log(`📡 Registrando nuevo conductor "${conductorData.nombre}" en tabla "rutas" de Supabase...`);
-      if (typeof insertarRutaSupabase === 'function') {
-        await insertarRutaSupabase({
-          conductor: conductorData.nombre,
-          vehiculo: '',
-          estado: 'pendiente',
-          dia: 'Lunes',
-          clientes: [],
-          tipoCliente: 'Mixto'
-        });
+      // Registrar nuevo conductor en la tabla independiente "conductores" de Supabase (idéntico a repostajes)
+      if (typeof insertarConductorSupabase === 'function') {
+        const resIns = await insertarConductorSupabase(conductorData);
+        if (resIns?.id) conductorData.id = resIns.id;
+        else if (resIns?.data?.[0]?.id) conductorData.id = resIns.data[0].id;
+      } else {
+        if (!conductorData.id) conductorData.id = Date.now();
+        listaConductores.push(conductorData);
       }
     }
 
     if (inputEditIndex) inputEditIndex.value = '';
+    if (inputId) inputId.value = '';
     window.conductores = listaConductores;
     window.choferes = listaConductores;
     guardarDatosEnLocal();
     window.toggleModalConductor(false);
-    renderConductores();
+    
+    if (typeof refrescarVistasConductores === 'function') {
+      refrescarVistasConductores();
+    } else {
+      renderConductores();
+    }
+
     if (typeof refrescarVistasRutas === 'function') {
       refrescarVistasRutas();
     }
@@ -1287,6 +1301,19 @@ window.eliminarConductor = async function(index) {
     if (errorEncontrado) {
       alert(`⚠️ No se pudo eliminar el conductor en Supabase: ${errorEncontrado.message || 'Error al eliminar sus rutas asociadas'}.\n\nEl conductor se mantiene en pantalla.`);
       return; // No quitar de la interfaz si la petición falló
+    }
+
+    // Limpiar conductor en la tabla independiente "conductores" de Supabase
+    if (typeof eliminarConductorSupabase === 'function') {
+      try {
+        const resElim = await eliminarConductorSupabase(ch.id, nombreConductor);
+        if (resElim && resElim.success === false) {
+          alert(`⚠️ No se pudo eliminar el conductor en Supabase: ${resElim.error?.message || 'Error desconocido'}.\n\nEl conductor se mantiene en pantalla.`);
+          return;
+        }
+      } catch (e) {
+        console.warn('Aviso al eliminar conductor en Supabase:', e);
+      }
     }
 
     // Por seguridad, limpiar registros que aún contengan el conductor en la tabla rutas de Supabase
@@ -1950,32 +1977,71 @@ window.verDetalleHistorialConductor = function(nombreConductor) {
 
   const rep = repostajes.filter(r => (r.conductor === nombreConductor || r.chofer === nombreConductor));
   const containerRep = document.getElementById('hist-lista-repostajes');
+  const badgeRep = document.getElementById('badge-contador-repostajes-hist');
+  if (badgeRep) {
+    const totalEuros = rep.reduce((acc, r) => acc + (parseFloat(r.euros) || 0), 0);
+    badgeRep.innerText = rep.length === 0 ? '0 tickets' : `${rep.length} ${rep.length === 1 ? 'ticket' : 'tickets'} (${totalEuros.toFixed(2)} €)`;
+  }
   if (containerRep) {
-    containerRep.innerHTML = rep.length === 0 ? '<p class="text-xs text-slate-500 italic">Sin repostajes.</p>' :
+    containerRep.innerHTML = rep.length === 0 ? '<p class="text-xs text-slate-400 italic p-3 text-center bg-slate-50/80 rounded-xl border border-dashed border-slate-200">Sin repostajes registrados para este conductor.</p>' :
       rep.map(r => `
-        <div class="bg-slate-50 p-3 rounded-xl border border-indigo-200 text-xs flex justify-between items-center">
-          <div>
-            <p class="font-bold text-slate-800">${r.tipo ? `${r.tipo} - ` : ''}${r.camion}</p>
-            <p class="text-slate-500">${r.fecha} | ${r.litros} L${r.km ? ` | ${r.km} KM` : ''}</p>
+        <div class="bg-white p-3 rounded-xl border border-indigo-100 hover:border-indigo-300 transition-all text-xs flex justify-between items-center shadow-2xs">
+          <div class="space-y-0.5 min-w-0 pr-2">
+            <p class="font-bold text-slate-800 flex items-center gap-1.5 truncate">
+              <i class="fa-solid fa-truck text-indigo-500 text-[10px] shrink-0"></i>
+              <span class="truncate">${r.tipo ? `${r.tipo} - ` : ''}${r.camion}</span>
+            </p>
+            <p class="text-[11px] text-slate-500 truncate"><i class="fa-solid fa-calendar-day text-slate-400 text-[10px] mr-1"></i>${r.fecha} · <span class="font-semibold text-slate-700">${r.litros} L</span>${r.km ? ` · ${r.km} KM` : ''}</p>
           </div>
-          <span class="font-bold text-indigo-700">${r.euros} €</span>
+          <span class="font-extrabold text-indigo-700 bg-indigo-50 px-2.5 py-1 rounded-lg border border-indigo-200 text-xs shadow-2xs shrink-0">${parseFloat(r.euros || 0).toFixed(2)} €</span>
         </div>
       `).join('');
   }
 
-  // Filtrar excluyendo rutas completadas o archivadas
-  const prox = rutas.filter(r => (r.conductor === nombreConductor || r.chofer === nombreConductor) && r.estado !== 'completada' && r.estado !== 'finalizada' && r.estado !== 'archivada');
+  // Filtrar excluyendo rutas completadas, finalizadas o archivadas
+  const prox = rutas.filter(r => (r.conductor === nombreConductor || r.chofer === nombreConductor) && r.estado !== 'completada' && r.estado !== 'finalizada' && r.estado !== 'archivada' && r.status !== 'completed');
+  const badgeProx = document.getElementById('badge-contador-proximas-rutas');
+  if (badgeProx) {
+    badgeProx.innerText = `${prox.length} ${prox.length === 1 ? 'pendiente' : 'pendientes'}`;
+  }
   const containerProx = document.getElementById('hist-lista-proximas-rutas');
   if (containerProx) {
-    containerProx.innerHTML = prox.length === 0 ? '<p class="text-xs text-slate-500 italic">Sin próximas rutas pendientes.</p>' :
+    containerProx.innerHTML = prox.length === 0 ? '<p class="text-xs text-slate-400 italic p-3 text-center bg-slate-50/80 rounded-xl border border-dashed border-slate-200">Sin próximas rutas pendientes.</p>' :
       prox.map(r => `
-        <div class="bg-slate-50 p-3 rounded-xl border border-blue-200 text-xs space-y-1">
-          <div class="flex justify-between font-bold text-blue-900">
-            <span>${r.dia} (${r.camion})</span>
+        <div class="bg-white p-3 rounded-xl border border-blue-100 hover:border-blue-300 transition-all text-xs space-y-1.5 shadow-2xs">
+          <div class="flex justify-between items-center font-bold text-blue-900">
+            <span class="flex items-center gap-1.5">
+              <i class="fa-solid fa-route text-blue-600 text-[11px]"></i>
+              <span>${r.dia}</span>
+            </span>
+            <span class="text-[11px] px-2 py-0.5 rounded bg-blue-50 text-blue-800 border border-blue-200 font-bold">${r.camion || r.vehiculo || 'Sin vehículo'}</span>
           </div>
-          <p class="text-slate-500">Clientes: ${r.clientes && r.clientes.length > 0 ? r.clientes.map(c => typeof c === 'object' && c !== null ? (c.nombre || c.name || '') : c).join(', ') : 'Ninguno'}</p>
+          <p class="text-[11px] text-slate-600 truncate"><span class="font-semibold text-slate-700">Clientes:</span> ${r.clientes && r.clientes.length > 0 ? r.clientes.map(c => typeof c === 'object' && c !== null ? (c.nombre || c.name || '') : c).join(', ') : 'Ninguno'}</p>
         </div>
       `).join('');
+  }
+};
+
+window.toggleDesplegableRepostajesHistorial = function(forzarEstado = null) {
+  const container = document.getElementById('contenedor-desplegable-repostajes');
+  const chevron = document.getElementById('chevron-repostajes-hist');
+  if (!container) return;
+
+  const estaOculto = container.classList.contains('hidden');
+  const nuevoEstadoAbierto = forzarEstado !== null ? forzarEstado : estaOculto;
+
+  if (nuevoEstadoAbierto) {
+    container.classList.remove('hidden');
+    if (chevron) {
+      chevron.classList.add('rotate-180', 'text-indigo-600');
+      chevron.classList.remove('text-slate-500');
+    }
+  } else {
+    container.classList.add('hidden');
+    if (chevron) {
+      chevron.classList.remove('rotate-180', 'text-indigo-600');
+      chevron.classList.add('text-slate-500');
+    }
   }
 };
 
@@ -1996,11 +2062,14 @@ function renderDiasSemana() {
   grid.innerHTML = '';
 
   const norm = str => str ? str.normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim().toLowerCase() : '';
+  const listaRutas = (typeof rutas !== 'undefined' && Array.isArray(rutas)) 
+    ? rutas 
+    : ((typeof window !== 'undefined' && Array.isArray(window.rutas)) ? window.rutas : []);
 
   diasSemana.forEach(dia => {
     // Filtrar EXCLUSIVAMENTE rutas activas (descartando completadas, finalizadas y archivadas)
-    const rutasDelDia = rutas.filter(r => 
-      norm(r.dia) === norm(dia) && 
+    const rutasDelDia = listaRutas.filter(r => 
+      r && norm(r.dia) === norm(dia) && 
       r.estado !== 'completada' && r.estado !== 'finalizada' && r.estado !== 'archivada'
     );
     const conductoresConRuta = [...new Set(rutasDelDia.map(r => (r.conductor || r.chofer)).filter(Boolean))];
@@ -2165,13 +2234,35 @@ document.addEventListener('keydown', function(e) {
 function renderGridConductoresAsignacion() {
   const container = document.getElementById('grid-conductores-asignacion') || document.getElementById('grid-choferes-asignacion');
   const badgeTotal = document.getElementById('badge-total-rutas-dia');
-  if (!container || !diaSeleccionadoActual) return;
+  if (!container) return;
+
+  if (!diaSeleccionadoActual) {
+    if (typeof window.diaActual !== 'undefined' && window.diaActual) {
+      diaSeleccionadoActual = window.diaActual;
+    } else {
+      const tit = document.getElementById('titulo-dia-seleccionado');
+      if (tit && tit.innerText) {
+        const dias = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado', 'Domingo'];
+        const enc = dias.find(d => d.toUpperCase() === tit.innerText.trim().toUpperCase());
+        if (enc) {
+          diaSeleccionadoActual = enc;
+          window.diaSeleccionadoActual = enc;
+        }
+      }
+    }
+  }
+  if (!diaSeleccionadoActual) return;
 
   const norm = str => str ? str.normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim().toLowerCase() : '';
 
   // Filtrar EXCLUSIVAMENTE rutas activas (no completadas, ni finalizadas, ni archivadas)
-  const rutasDelDia = rutas.filter(r => 
-    norm(r.dia) === norm(diaSeleccionadoActual) &&
+  const listaRutas = (typeof rutas !== 'undefined' && Array.isArray(rutas)) 
+    ? rutas 
+    : ((typeof window !== 'undefined' && Array.isArray(window.rutas)) ? window.rutas : []);
+
+  const rutasDelDia = listaRutas.filter(r => 
+    r && norm(r.dia) === norm(diaSeleccionadoActual) &&
+    r.status !== 'completed' &&
     r.estado !== 'completada' && r.estado !== 'finalizada' && r.estado !== 'archivada'
   );
   if (badgeTotal) badgeTotal.innerText = `${rutasDelDia.length} Ruta(s) Activa(s)`;
@@ -2239,20 +2330,19 @@ window.finalizarRutaDesdePlanificacion = async function(rutaId) {
   const conductor = ruta.conductor || ruta.chofer || '';
   const dia = ruta.dia || diaSeleccionadoActual || 'este día';
 
-  // Si el modal de cierre está disponible, abrirlo para registrar Km y observaciones opcionales
-  if (typeof prepararCierreRutaModal === 'function') {
-    prepararCierreRutaModal(conductor, ruta.id);
-  } else {
-    if (confirm(`¿Marcar como finalizada la ruta de ${conductor} para el ${dia}?\n\nAl finalizarla, desaparecerá de la planificación semanal activa y se guardará automáticamente en el Historial.`)) {
+  if (confirm(`¿Marcar como finalizada la ruta de ${conductor} para el ${dia}?\n\nAl finalizarla, desaparecerá de la planificación semanal activa y se guardará automáticamente en el Historial.`)) {
+    if (typeof finalizarRutaConductor === 'function') {
+      await finalizarRutaConductor(ruta.id, conductor);
+    } else if (typeof finalizarRuta === 'function') {
       await finalizarRuta(rutaId, {
         dia: dia,
         conductor: conductor,
         chofer: conductor,
         obs: `Ruta finalizada desde Planificación Semanal (${dia})`
       });
-      if (typeof mostrarToastLogistica === 'function') {
-        mostrarToastLogistica(`✓ Ruta de ${conductor} finalizada y registrada en el Historial`);
-      }
+    }
+    if (typeof mostrarToastLogistica === 'function') {
+      mostrarToastLogistica(`✓ Ruta de ${conductor} finalizada y registrada en el Historial`);
     }
   }
 };
@@ -2563,10 +2653,10 @@ function renderCheckboxesClientesRapidos() {
 
   if (!containerHoteles || !containerRest || !containerMixto || !containerCamping) return;
 
-  const hoteles = clientes.filter(c => c.tipo === 'Hoteles');
-  const restaurantes = clientes.filter(c => c.tipo === 'Restaurantes');
-  const mixtos = clientes.filter(c => c.tipo === 'Mixto');
-  const campings = clientes.filter(c => c.tipo === 'Camping');
+  const hoteles = clientes.filter(c => normalizarTipoCliente(c.tipo) === 'Hotel');
+  const restaurantes = clientes.filter(c => normalizarTipoCliente(c.tipo) === 'Restaurante');
+  const mixtos = clientes.filter(c => normalizarTipoCliente(c.tipo) === 'Mixto');
+  const campings = clientes.filter(c => normalizarTipoCliente(c.tipo) === 'Camping');
 
   containerHoteles.innerHTML = hoteles.length === 0 ? '<p class="text-xs text-slate-400 italic">No hay hoteles creados.</p>' :
     hoteles.map(h => `
@@ -2948,7 +3038,7 @@ window.toggleModalCamion = function(show, editIndex = null) {
         document.getElementById('camion-tipo').value = c.tipo || 'Pequeño';
         document.getElementById('camion-foto-input').value = c.foto || '';
         if (preview) {
-          preview.innerHTML = c.foto ? `<img src="${c.foto}" class="w-full h-24 object-cover rounded-xl border border-blue-300">` : '';
+          preview.innerHTML = (c.foto && typeof esFotoValida === 'function' && esFotoValida(c.foto)) ? `<img src="${c.foto}" class="w-full h-24 object-cover rounded-xl border border-blue-300">` : '';
         }
       }
     } else {

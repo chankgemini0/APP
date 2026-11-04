@@ -106,7 +106,7 @@ window.abrirSelectorCamionesInicio = function() {
     grid.innerHTML = camionesDisponibles.map(c => `
       <div onclick="seleccionarCamionInicio('${c.matricula}', '${c.foto || ''}')" class="light-card light-card-hover rounded-2xl p-4 border border-blue-200 cursor-pointer flex flex-col items-center text-center space-y-2 group">
         <div class="w-16 h-16 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center overflow-hidden border-2 border-blue-200 group-hover:border-blue-600 transition-all shadow-inner">
-          ${c.foto ? `<img src="${c.foto}" class="w-full h-full object-cover" alt="${c.matricula}">` : '<i class="fa-solid fa-truck text-2xl"></i>'}
+          ${(c.foto && typeof esFotoValida === 'function' && esFotoValida(c.foto)) ? `<img src="${c.foto}" class="w-full h-full object-cover" alt="${c.matricula}">` : '<i class="fa-solid fa-truck text-2xl"></i>'}
         </div>
         <div>
           <h4 class="font-black text-blue-950 text-sm tracking-tight">${c.matricula}</h4>
@@ -132,7 +132,7 @@ window.seleccionarCamionInicio = function(matricula, foto) {
   if (input) input.value = matricula;
   if (prevMat) prevMat.innerText = matricula;
   if (prevImg) {
-    prevImg.innerHTML = foto ? `<img src="${foto}" class="w-full h-full object-cover">` : `<i class="fa-solid fa-truck text-sm"></i>`;
+    prevImg.innerHTML = (foto && typeof esFotoValida === 'function' && esFotoValida(foto)) ? `<img src="${foto}" class="w-full h-full object-cover">` : `<i class="fa-solid fa-truck text-sm"></i>`;
   }
 
   cerrarSelectorCamiones();
@@ -150,6 +150,9 @@ window.iniciarRutaServicio = function(e) {
     alert('Por favor, haz clic para seleccionar un conductor y un vehículo.');
     return;
   }
+
+  // Registrar timestamp exacto de inicio de ruta en localStorage
+  localStorage.setItem('routeStartTime', new Date().toISOString());
 
   datosInicioPendiente = { conductor, chofer: conductor, camionMat };
 
@@ -204,6 +207,7 @@ window.actualizarListadoRutasParaInicio = function() {
     ? rutas.filter(r => 
         (r.conductor || r.chofer) && (r.conductor || r.chofer).trim().toLowerCase() === conductor.trim().toLowerCase() && 
         r.dia && r.dia.trim().toLowerCase() === diaSeleccionado.trim().toLowerCase() &&
+        r.status !== 'completed' &&
         r.estado !== 'completada' && r.estado !== 'finalizada' && r.estado !== 'archivada'
       )
     : [];
@@ -213,7 +217,7 @@ window.actualizarListadoRutasParaInicio = function() {
     ? rutas.filter(r => 
         (r.conductor || r.chofer) && (r.conductor || r.chofer).trim().toLowerCase() === conductor.trim().toLowerCase() && 
         r.dia && r.dia.trim().toLowerCase() === diaSeleccionado.trim().toLowerCase() &&
-        (r.estado === 'completada' || r.estado === 'finalizada' || r.estado === 'archivada')
+        (r.status === 'completed' || r.estado === 'completada' || r.estado === 'finalizada' || r.estado === 'archivada')
       )
     : [];
 
@@ -365,6 +369,14 @@ window.ejecutarInicioServicioDefinitivo = function(conductor, camionMat, diaSele
     fechaStr: new Date().toISOString().split('T')[0],
     clientes: [...clientesDeRuta]
   };
+
+  // Guardar timestamp exacto de inicio y referencia de ruta en localStorage
+  const timestampInicioExacto = new Date().toISOString();
+  localStorage.setItem('routeStartTime', timestampInicioExacto);
+  if (rutaElegida && rutaElegida.id) {
+    localStorage.setItem('activeRouteId', String(rutaElegida.id));
+  }
+  console.log('✓ [BugamedApp] Inicio de ruta registrado:', timestampInicioExacto);
 
   const c = camiones.find(v => v.matricula === camionEfectivo);
   if (c) c.estado = `Ocupado por ${conductor} (${rutaNombre})`;
@@ -524,9 +536,11 @@ function renderAcordeonRutasActivas(conductoresEnRuta) {
             <p class="text-xs font-extrabold uppercase text-blue-950 flex items-center gap-1.5 tracking-wider">
               <i class="fa-solid fa-boxes-packing text-blue-600 text-sm"></i> Registro de Carros por Cliente
             </p>
-            <button onclick="prepararCierreRutaModal('${conductorNombre}')" class="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-black rounded-xl shadow-xs transition-all cursor-pointer flex items-center gap-2 shrink-0">
-              <i class="fa-solid fa-flag-checkered"></i> Finalizar Esta Ruta
-            </button>
+            <div class="flex items-center gap-2 flex-wrap">
+              <button type="button" onclick="finalizarRutaConductor('${servicio.rutaId || ''}', '${conductorNombre}')" class="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-black rounded-xl shadow-xs transition-all cursor-pointer flex items-center gap-2 shrink-0" title="Finalizar esta ruta y ver resumen de tiempo transcurrido">
+                <i class="fa-solid fa-flag-checkered"></i> Finalizar Ruta
+              </button>
+            </div>
           </div>
 
           <!-- RESUMEN DE PROGRESO Y CONTADORES DE CARROS -->
@@ -553,12 +567,6 @@ function renderAcordeonRutasActivas(conductoresEnRuta) {
             </div>
           </div>
 
-          <!-- BUSCADOR RÁPIDO DENTRO DE LA RUTA -->
-          <div class="relative">
-            <i class="fa-solid fa-magnifying-glass absolute left-3.5 top-3 text-slate-400 text-xs"></i>
-            <input type="text" oninput="filtrarParadasRutaActiva('${conductorNombre}', this.value)" placeholder="Buscar cliente o dirección en esta ruta activa..." class="w-full bg-white border border-slate-300 rounded-xl pl-9 pr-4 py-2 text-xs text-slate-800 placeholder-slate-400 focus:outline-none focus:border-indigo-500 shadow-2xs">
-          </div>
-
           <!-- REJILLA COMPACTA DE TARJETAS DE CLIENTES DE LA RUTA ACTIVA -->
           <div id="grid-clientes-activos-${conductorNombre}" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-2 xl:grid-cols-3 gap-3 max-h-[560px] overflow-y-auto custom-scrollbar pr-1">
             ${servicio.clientes.map((clienteItem, idx) => {
@@ -569,11 +577,12 @@ function renderAcordeonRutasActivas(conductoresEnRuta) {
                 ? clientes.find(c => c.nombre && c.nombre.trim().toLowerCase() === clienteNombre.trim().toLowerCase())
                 : null;
 
+              const tipoNorm = cliInfo && cliInfo.tipo ? (typeof normalizarTipoCliente === 'function' ? normalizarTipoCliente(cliInfo.tipo) : cliInfo.tipo) : '';
               let badgeTipoColor = 'bg-slate-100 text-slate-600 border-slate-200';
-              if (cliInfo && cliInfo.tipo === 'Hoteles') badgeTipoColor = 'bg-purple-100 text-purple-700 border-purple-200';
-              if (cliInfo && cliInfo.tipo === 'Restaurantes') badgeTipoColor = 'bg-blue-100 text-blue-700 border-blue-200';
-              if (cliInfo && cliInfo.tipo === 'Camping') badgeTipoColor = 'bg-amber-100 text-amber-700 border-amber-200';
-              if (cliInfo && cliInfo.tipo === 'Mixto') badgeTipoColor = 'bg-emerald-100 text-emerald-700 border-emerald-200';
+              if (tipoNorm === 'Hotel') badgeTipoColor = 'bg-purple-100 text-purple-700 border-purple-200';
+              if (tipoNorm === 'Restaurante') badgeTipoColor = 'bg-blue-100 text-blue-700 border-blue-200';
+              if (tipoNorm === 'Camping') badgeTipoColor = 'bg-amber-100 text-amber-700 border-amber-200';
+              if (tipoNorm === 'Mixto') badgeTipoColor = 'bg-emerald-100 text-emerald-700 border-emerald-200';
 
               return `
                 <div data-cliente-card-conductor="${conductorNombre}" data-cliente-card-chofer="${conductorNombre}" data-cliente-nombre="${clienteNombre.toLowerCase()}" data-cliente-dir="${(cliInfo?.direccion || '' + ' ' + cliInfo?.zona || '').toLowerCase()}" class="light-card rounded-2xl p-3.5 border ${env.completado ? 'border-emerald-300 bg-emerald-50/25 shadow-xs' : 'border-slate-200 bg-white hover:border-indigo-300 shadow-2xs'} flex flex-col justify-between gap-3 transition-all group">
@@ -591,7 +600,7 @@ function renderAcordeonRutasActivas(conductoresEnRuta) {
                       </div>
                       ${env.completado 
                         ? '<span class="text-[10px] bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded-md font-extrabold border border-emerald-200 flex items-center gap-1 shrink-0"><i class="fa-solid fa-check"></i> Hecho</span>' 
-                        : '<span class="text-[10px] bg-slate-100 text-slate-500 px-2 py-0.5 rounded-md font-bold shrink-0">Pendiente</span>'
+                        : ''
                       }
                     </div>
 
@@ -604,11 +613,11 @@ function renderAcordeonRutasActivas(conductoresEnRuta) {
                           </p>
                         ` : '<p class="text-slate-400 italic">Sin dirección específica</p>'}
                       </div>
-                      <div class="flex items-center gap-1 shrink-0">
-                        <button type="button" onclick="abrirNavegacionGPSCliente('${clienteNombre.replace(/'/g, "\\'")}')" class="px-2 py-1 bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 text-white rounded-lg text-[10px] font-black flex items-center gap-1 shadow-2xs transition-all cursor-pointer hover:scale-105" title="Abrir navegación GPS en Google Maps">
-                          <i class="fa-solid fa-diamond-turn-right text-[10px]"></i> GPS
+                      <div class="flex items-center gap-1.5 shrink-0">
+                        <button type="button" onclick="abrirNavegacionGPSCliente('${clienteNombre.replace(/'/g, "\\'")}')" class="w-6 h-6 bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 text-white rounded-lg flex items-center justify-center shadow-2xs transition-all cursor-pointer hover:scale-110 shrink-0" title="Abrir en Google Maps" aria-label="Abrir en Google Maps">
+                          <i class="fa-solid fa-location-dot text-xs"></i>
                         </button>
-                        ${cliInfo && cliInfo.tipo ? `<span class="text-[9px] px-1.5 py-0.5 rounded font-extrabold border ${badgeTipoColor}">${cliInfo.tipo}</span>` : ''}
+                        ${tipoNorm ? `<span class="text-[9px] px-1.5 py-0.5 rounded font-extrabold border ${badgeTipoColor}">${tipoNorm}</span>` : ''}
                       </div>
                     </div>
                   </div>
@@ -899,6 +908,10 @@ window.confirmarCierreRutaDefinitivo = async function(e) {
   if (inputRutaId) inputRutaId.value = '';
 
   toggleModalCierreFinal(false);
+
+  // Mostrar modal de finalización con el cálculo exacto de tiempo y sincronización con Supabase
+  await finalizarRutaConductor(targetRutaId, conductorTarget);
+
   renderModuloLogistica();
   if (typeof refrescarVistasRutas === 'function') {
     refrescarVistasRutas();
@@ -1112,8 +1125,22 @@ window.renderVisualizacionRutasConductores = function() {
   }
 
   grid.innerHTML = lista.map(ch => {
+    const esRutaFinalizada = r => Boolean(
+      r && (
+        r.status === 'completed' ||
+        r.estado === 'completada' ||
+        r.estado === 'finalizada' ||
+        r.estado === 'archivada' ||
+        r.status === 'finalizada'
+      )
+    );
+
     const rutasDelConductor = (typeof rutas !== 'undefined' && Array.isArray(rutas)) 
-      ? rutas.filter(r => (r.conductor || r.chofer) && (r.conductor || r.chofer).trim().toLowerCase() === ch.nombre.trim().toLowerCase()) 
+      ? rutas.filter(r => 
+          (r.conductor || r.chofer) && 
+          (r.conductor || r.chofer).trim().toLowerCase() === ch.nombre.trim().toLowerCase() &&
+          !esRutaFinalizada(r)
+        ) 
       : [];
     const diasConRuta = new Set(rutasDelConductor.map(r => r.dia)).size;
     const estaEnRuta = !!(serviciosActivos && serviciosActivos[ch.nombre]);
@@ -1199,8 +1226,22 @@ window.verDetalleRutasConductor = function(nombreConductor) {
   if (!contenedorDias) return;
 
   const diasOrdenados = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado', 'Domingo'];
+  const esRutaFinalizada = r => Boolean(
+    r && (
+      r.status === 'completed' ||
+      r.estado === 'completada' ||
+      r.estado === 'finalizada' ||
+      r.estado === 'archivada' ||
+      r.status === 'finalizada'
+    )
+  );
+
   const rutasDelConductor = (typeof rutas !== 'undefined' && Array.isArray(rutas))
-    ? rutas.filter(r => (r.conductor || r.chofer) && (r.conductor || r.chofer).trim().toLowerCase() === nombreConductor.trim().toLowerCase())
+    ? rutas.filter(r => 
+        (r.conductor || r.chofer) && 
+        (r.conductor || r.chofer).trim().toLowerCase() === nombreConductor.trim().toLowerCase() &&
+        !esRutaFinalizada(r)
+      )
     : [];
 
   if (badgeTotal) {
@@ -1305,35 +1346,29 @@ window.verDetalleRutasConductor = function(nombreConductor) {
         <!-- LISTADO DE RUTAS DE ESTE DÍA (SEPARADAS Y ETIQUETADAS COMO 'Ruta 1', 'Ruta 2', etc.) -->
         <div class="space-y-4">
           ${rutasDelDia.map((r, rIdx) => {
-            const estaCompletada = (r.estado === 'completada' || r.estado === 'finalizada');
+            const tipoRutaNorm = r.tipoCliente ? (typeof normalizarTipoCliente === 'function' ? normalizarTipoCliente(r.tipoCliente) : r.tipoCliente) : '';
             return `
-            <div class="bg-slate-50/90 rounded-2xl p-4 sm:p-5 border ${estaCompletada ? 'border-emerald-300 bg-emerald-50/20' : 'border-slate-200'} space-y-3.5 hover:border-indigo-300 transition-all shadow-2xs">
+            <div class="bg-slate-50/90 rounded-2xl p-4 sm:p-5 border border-slate-200 space-y-3.5 hover:border-indigo-300 transition-all shadow-2xs">
               
               <!-- ENCABEZADO DE LA RUTA Y ACCIÓN DE INICIO DIRECTO -->
               <div class="flex flex-wrap justify-between items-center gap-2 border-b border-slate-200/80 pb-3">
                 <div class="flex items-center gap-2.5 flex-wrap">
-                  <span class="px-3 py-1.5 ${estaCompletada ? 'bg-emerald-600' : 'bg-blue-600'} text-white rounded-xl text-xs font-black uppercase tracking-wider flex items-center gap-1.5 shadow-xs">
+                  <span class="px-3 py-1.5 bg-blue-600 text-white rounded-xl text-xs font-black uppercase tracking-wider flex items-center gap-1.5 shadow-xs">
                     <i class="fa-solid fa-route"></i> Ruta ${rIdx + 1}
                   </span>
                   <span class="px-3 py-1.5 bg-white text-slate-800 rounded-xl text-xs font-bold border border-slate-200 flex items-center gap-1.5 shadow-2xs">
                     <i class="fa-solid fa-truck text-blue-600"></i> Vehículo: <strong class="text-blue-950">${r.camion || 'No asignado'}</strong>
                   </span>
-                  ${r.tipoCliente ? `<span class="px-2.5 py-1 bg-purple-50 text-purple-700 rounded-lg text-xs font-semibold border border-purple-200">${r.tipoCliente}</span>` : ''}
+                  ${tipoRutaNorm ? `<span class="px-2.5 py-1 bg-purple-50 text-purple-700 rounded-lg text-xs font-semibold border border-purple-200">${tipoRutaNorm}</span>` : ''}
                   <span class="text-xs font-bold text-slate-500 bg-white px-2.5 py-1 rounded-lg border border-slate-200">
                     <i class="fa-solid fa-shop text-slate-400 mr-1"></i>${r.clientes ? r.clientes.length : 0} ${r.clientes && r.clientes.length === 1 ? 'establecimiento' : 'establecimientos'}
                   </span>
                 </div>
 
-                <!-- BOTÓN PARA INICIAR ESTA RUTA DIRECTAMENTE DESDE EL PORTAL O DISTINTIVO SI YA ESTÁ COMPLETADA -->
-                ${estaCompletada ? `
-                  <span class="px-3.5 py-1.5 bg-emerald-100 text-emerald-800 rounded-xl text-xs font-black flex items-center gap-1.5 border border-emerald-300 shadow-2xs">
-                    <i class="fa-solid fa-check-double text-emerald-600"></i> Finalizada
-                  </span>
-                ` : `
-                  <button type="button" onclick="iniciarRutaDirectaDesdePortal('${ch.nombre.replace(/'/g, "\\'")}', '${dia}', ${rIdx}, '${r.id || ''}')" class="px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-extrabold flex items-center gap-1.5 shadow-xs transition-all cursor-pointer hover:scale-105 active:scale-95" title="Iniciar esta ruta en el Terminal de Logística">
-                    <i class="fa-solid fa-play text-[10px]"></i> Iniciar Esta Ruta
-                  </button>
-                `}
+                <!-- BOTÓN PARA INICIAR ESTA RUTA DIRECTAMENTE DESDE EL PORTAL -->
+                <button type="button" onclick="iniciarRutaDirectaDesdePortal('${ch.nombre.replace(/'/g, "\\'")}', '${dia}', ${rIdx}, '${r.id || ''}')" class="px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-extrabold flex items-center gap-1.5 shadow-xs transition-all cursor-pointer hover:scale-105 active:scale-95" title="Iniciar esta ruta en el Terminal de Logística">
+                  <i class="fa-solid fa-play text-[10px]"></i> Iniciar Esta Ruta
+                </button>
               </div>
 
               <!-- PARADAS / ESTABLECIMIENTOS ASIGNADOS A ESTA RUTA EN REJILLA COMPACTA -->
@@ -1351,11 +1386,14 @@ window.verDetalleRutasConductor = function(nombreConductor) {
                           ? clientes.find(c => c.nombre && c.nombre.trim().toLowerCase() === clienteNombre.trim().toLowerCase()) 
                           : null;
 
+                        const tipoNorm = cliInfo && cliInfo.tipo 
+                          ? (typeof normalizarTipoCliente === 'function' ? normalizarTipoCliente(cliInfo.tipo) : cliInfo.tipo) 
+                          : (r.tipoCliente ? (typeof normalizarTipoCliente === 'function' ? normalizarTipoCliente(r.tipoCliente) : r.tipoCliente) : '');
                         let badgeColor = 'bg-slate-100 text-slate-700 border-slate-200';
-                        if (cliInfo && cliInfo.tipo === 'Hoteles') badgeColor = 'bg-purple-100 text-purple-700 border-purple-200';
-                        if (cliInfo && cliInfo.tipo === 'Restaurantes') badgeColor = 'bg-blue-100 text-blue-700 border-blue-200';
-                        if (cliInfo && cliInfo.tipo === 'Camping') badgeColor = 'bg-amber-100 text-amber-700 border-amber-200';
-                        if (cliInfo && cliInfo.tipo === 'Mixto') badgeColor = 'bg-emerald-100 text-emerald-700 border-emerald-200';
+                        if (tipoNorm === 'Hotel') badgeColor = 'bg-purple-100 text-purple-700 border-purple-200';
+                        if (tipoNorm === 'Restaurante') badgeColor = 'bg-blue-100 text-blue-700 border-blue-200';
+                        if (tipoNorm === 'Camping') badgeColor = 'bg-amber-100 text-amber-700 border-amber-200';
+                        if (tipoNorm === 'Mixto') badgeColor = 'bg-emerald-100 text-emerald-700 border-emerald-200';
 
                         return `
                           <div class="bg-white p-3 rounded-xl border border-slate-200 hover:border-indigo-300 transition-all flex flex-col justify-between gap-2 shadow-2xs group">
@@ -1366,7 +1404,7 @@ window.verDetalleRutasConductor = function(nombreConductor) {
                                 <span class="w-5 h-5 rounded-md bg-blue-100 text-blue-800 font-black flex items-center justify-center text-[10px] shrink-0">
                                   ${cIdx + 1}
                                 </span>
-                                ${cliInfo && cliInfo.tipo ? `<span class="text-[9px] px-1.5 py-0.5 rounded font-extrabold border ${badgeColor}">${cliInfo.tipo}</span>` : ''}
+                                ${tipoNorm ? `<span class="text-[9px] px-1.5 py-0.5 rounded font-extrabold border ${badgeColor}">${tipoNorm}</span>` : ''}
                               </div>
                               <p class="font-extrabold text-slate-800 text-xs truncate" title="${clienteNombre}">
                                 ${clienteNombre}
@@ -1378,14 +1416,14 @@ window.verDetalleRutasConductor = function(nombreConductor) {
                               ` : '<p class="text-[10px] text-slate-300 italic">Sin dirección</p>'}
                             </div>
 
-                            <!-- ACCIONES DIRECTAS (GPS Y TELÉFONO) -->
-                            <div class="flex items-center gap-1.5 pt-1.5 border-t border-slate-100">
-                              <button type="button" onclick="abrirNavegacionGPSCliente('${clienteNombre.replace(/'/g, "\\'")}')" class="flex-1 py-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-[10px] font-black flex items-center justify-center gap-1 cursor-pointer transition-colors shadow-2xs" title="Navegar en Google Maps">
-                                <i class="fa-solid fa-diamond-turn-right text-[9px]"></i> GPS
+                            <!-- ACCIONES DIRECTAS (GPS COMPACTO Y TELÉFONO) -->
+                            <div class="flex items-center justify-end gap-1.5 pt-1.5 border-t border-slate-100">
+                              <button type="button" onclick="abrirNavegacionGPSCliente('${clienteNombre.replace(/'/g, "\\'")}')" class="w-6 h-6 bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 text-white rounded-lg flex items-center justify-center shadow-2xs transition-all cursor-pointer hover:scale-110 shrink-0" title="Abrir en Google Maps" aria-label="Abrir en Google Maps">
+                                <i class="fa-solid fa-location-dot text-xs"></i>
                               </button>
                               ${cliInfo && cliInfo.telefono ? `
-                                <a href="tel:${cliInfo.telefono}" class="px-2 py-1 bg-blue-50 hover:bg-blue-100 text-blue-700 rounded-lg text-[10px] font-bold flex items-center gap-1 border border-blue-200 transition-colors" title="Llamar: ${cliInfo.telefono}">
-                                  <i class="fa-solid fa-phone text-[9px]"></i>
+                                <a href="tel:${cliInfo.telefono}" class="w-6 h-6 bg-blue-50 hover:bg-blue-100 text-blue-700 rounded-lg flex items-center justify-center border border-blue-200 transition-colors shadow-2xs hover:scale-110 shrink-0" title="Llamar: ${cliInfo.telefono}" aria-label="Llamar">
+                                  <i class="fa-solid fa-phone text-[10px]"></i>
                                 </a>
                               ` : ''}
                             </div>
@@ -1567,3 +1605,189 @@ document.addEventListener('click', function(e) {
     menuConductor.classList.add('hidden');
   }
 });
+
+/* ==========================================================================
+   GESTIÓN DE TIEMPO Y FINALIZACIÓN DE RUTA DEL CONDUCTOR (BUGAMEDAPP)
+   ========================================================================== */
+
+/**
+ * 1. REGISTRO DE INICIO DE RUTA
+ * Guarda el timestamp exacto de inicio en localStorage ('routeStartTime')
+ * y opcionalmente el identificador de la ruta activa ('activeRouteId').
+ */
+window.iniciarRuta = function(routeId = null) {
+  const timestamp = new Date().toISOString();
+  localStorage.setItem('routeStartTime', timestamp);
+  if (routeId) {
+    localStorage.setItem('activeRouteId', String(routeId));
+  }
+  console.log('✓ [BugamedApp] Timestamp de inicio de ruta guardado:', timestamp);
+  return timestamp;
+};
+
+/**
+ * Función auxiliar para calcular el tiempo transcurrido exacto.
+ * Retorna totalSegundos y el formato legible "00h 00m 00s".
+ */
+function calcularTiempoTranscurrido(fechaInicioISO) {
+  let inicio;
+  if (fechaInicioISO) {
+    inicio = new Date(fechaInicioISO);
+    if (isNaN(inicio.getTime())) inicio = new Date();
+  } else {
+    inicio = new Date();
+  }
+
+  const fin = new Date();
+  const diffMs = Math.max(0, fin.getTime() - inicio.getTime());
+  const totalSegundos = Math.floor(diffMs / 1000);
+
+  const horas = Math.floor(totalSegundos / 3600);
+  const minutos = Math.floor((totalSegundos % 3600) / 60);
+  const segundos = totalSegundos % 60;
+
+  const formateado = `${String(horas).padStart(2, '0')}h ${String(minutos).padStart(2, '0')}m ${String(segundos).padStart(2, '0')}s`;
+
+  return {
+    totalSegundos,
+    formateado,
+    horas,
+    minutos,
+    segundos,
+    inicio,
+    fin,
+    inicioStr: inicio.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
+    finStr: fin.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })
+  };
+}
+window.calcularTiempoTranscurrido = calcularTiempoTranscurrido;
+
+/**
+ * 2. CÁLCULO Y MODAL AL FINALIZAR RUTA
+ * - Calcula el tiempo exacto transcurrido desde el inicio.
+ * - Actualiza el estado en Supabase (tabla 'routes'): status: 'completed', completed_at, duration_seconds.
+ * - Abre el modal flotante con Tailwind CSS obligando a presionar "Aceptar".
+ */
+window.finalizarRutaConductor = async function(routeId = null, conductorNombre = null) {
+  // 1. Obtener timestamp guardado al inicio
+  const routeStartTime = localStorage.getItem('routeStartTime');
+  const tiempo = calcularTiempoTranscurrido(routeStartTime);
+  const completedAt = new Date().toISOString();
+
+  // 2. Determinar ID de la ruta activa
+  let targetId = routeId || localStorage.getItem('activeRouteId');
+  if (!targetId && typeof serviciosActivos !== 'undefined') {
+    const servicio = conductorNombre ? serviciosActivos[conductorNombre] : Object.values(serviciosActivos)[0];
+    if (servicio && servicio.rutaId) targetId = servicio.rutaId;
+  }
+
+  // 3. Actualizar en Supabase en la tabla 'rutas'
+  const clientSupabase = window._supabase || (typeof _supabase !== 'undefined' ? _supabase : null);
+  if (clientSupabase && targetId && !String(targetId).startsWith('temp_') && !String(targetId).startsWith('ruta_init_')) {
+    try {
+      const { data, error } = await clientSupabase
+        .from('rutas')
+        .update({ estado: 'finalizada' })
+        .eq('id', targetId)
+        .select();
+
+      if (error) {
+        console.error("Error al actualizar ruta en tabla 'rutas':", error.message);
+      } else {
+        console.log(`✓ [BugamedApp] Ruta ${targetId} finalizada exitosamente en tabla 'rutas'.`);
+      }
+    } catch (err) {
+      console.error('Error al actualizar ruta en Supabase:', err);
+    }
+  }
+
+  // 4. Actualizar estado en memoria local si la ruta aún no estaba marcada
+  if (targetId && typeof finalizarRuta === 'function') {
+    const rutaEnMemoria = (typeof rutas !== 'undefined' && Array.isArray(rutas))
+      ? rutas.find(r => String(r.id) === String(targetId))
+      : null;
+    if (rutaEnMemoria && rutaEnMemoria.estado !== 'completada' && rutaEnMemoria.estado !== 'finalizada') {
+      try {
+        await finalizarRuta(targetId, {
+          duracionFormateada: tiempo.formateado,
+          duration_seconds: tiempo.totalSegundos,
+          completed_at: completedAt
+        });
+      } catch (e) {
+        console.warn('Aviso en finalizarRuta local:', e);
+      }
+    }
+  } else if (conductorNombre && typeof serviciosActivos !== 'undefined' && serviciosActivos[conductorNombre]) {
+    delete serviciosActivos[conductorNombre];
+    if (typeof guardarDatosEnLocal === 'function') guardarDatosEnLocal();
+  }
+
+  // 5. Mostrar ventana modal flotante
+  const modal = document.getElementById('modal-fin-ruta');
+  if (modal) {
+    const elDuracion = document.getElementById('modal-fin-ruta-duracion');
+    const elInicio = document.getElementById('modal-fin-ruta-hora-inicio');
+    const elFin = document.getElementById('modal-fin-ruta-hora-fin');
+
+    if (elDuracion) elDuracion.innerText = tiempo.formateado;
+    if (elInicio) elInicio.innerText = tiempo.inicioStr;
+    if (elFin) elFin.innerText = tiempo.finStr;
+
+    // Ocultar cualquier otro modal que estuviera abierto (ej: cierre o repostaje)
+    const modalCierrePrevio = document.getElementById('modal-cierre-final');
+    if (modalCierrePrevio) modalCierrePrevio.classList.add('hidden');
+
+    modal.classList.remove('hidden');
+  } else {
+    alert(`¡Ruta finalizada con éxito!\nTiempo invertido: ${tiempo.formateado}`);
+  }
+
+  return {
+    totalSegundos: tiempo.totalSegundos,
+    duracionFormateada: tiempo.formateado,
+    completedAt: completedAt
+  };
+};
+
+/**
+ * 3. ACCIÓN DEL BOTÓN ACEPTAR
+ * - Oculta la ventana modal.
+ * - Borra el registro temporal de inicio ('routeStartTime').
+ * - Redirige o actualiza la vista del panel del conductor.
+ */
+window.cerrarModalFinRutaYAceptar = function() {
+  const modal = document.getElementById('modal-fin-ruta');
+  if (modal) {
+    modal.classList.add('hidden');
+  }
+
+  // Borrar el registro temporal de inicio y activeRouteId
+  localStorage.removeItem('routeStartTime');
+  localStorage.removeItem('activeRouteId');
+
+  // Redirigir o actualizar la vista del panel del conductor
+  if (typeof switchTab === 'function') {
+    switchTab('logistica');
+  }
+  if (typeof renderModuloLogistica === 'function') {
+    renderModuloLogistica();
+  }
+  if (typeof refrescarVistasRutas === 'function') {
+    refrescarVistasRutas();
+  }
+  if (typeof actualizarKPIs === 'function') {
+    actualizarKPIs();
+  }
+
+  console.log('✓ [BugamedApp] Ruta finalizada aceptada, storage temporal limpiado y vista actualizada.');
+};
+
+// Asegurar que el modal obligue al usuario a pulsar el botón Aceptar (evitar escape key)
+document.addEventListener('keydown', function(e) {
+  const modal = document.getElementById('modal-fin-ruta');
+  if (modal && !modal.classList.contains('hidden') && e.key === 'Escape') {
+    e.preventDefault();
+    e.stopPropagation();
+  }
+});
+
