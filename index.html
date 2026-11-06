@@ -9,6 +9,38 @@
   <link rel="stylesheet" href="css/styles.css">
   <!-- Supabase JS SDK v2 CDN -->
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <style>
+    /* Efecto visual y animación reactiva para nuevas averías en tiempo real */
+    @keyframes highlightIncidencia {
+      0% {
+        transform: scale(0.97);
+        box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.7);
+        border-color: #ef4444;
+      }
+      50% {
+        transform: scale(1.02);
+        box-shadow: 0 0 16px 4px rgba(239, 68, 68, 0.35);
+        border-color: #dc2626;
+      }
+      100% {
+        transform: scale(1);
+        box-shadow: 0 0 0 0 rgba(239, 68, 68, 0);
+      }
+    }
+    .incidencia-nueva-anim {
+      animation: highlightIncidencia 1.4s ease-in-out 3;
+      border-color: #ef4444 !important;
+      background-color: rgba(254, 242, 242, 0.9) !important;
+      position: relative;
+    }
+    @keyframes kpiAlertPulse {
+      0%, 100% { transform: scale(1); }
+      50% { transform: scale(1.25); color: #dc2626; }
+    }
+    .kpi-alerta-anim {
+      animation: kpiAlertPulse 0.6s ease-in-out 3;
+    }
+  </style>
 </head>
 <body class="min-h-screen flex flex-col custom-scrollbar text-base relative overflow-x-hidden">
 
@@ -123,7 +155,7 @@
           </div>
         </button>
 
-        <button onclick="switchTab('incidencias')" class="flex items-center gap-2 px-3 py-2 rounded-xl bg-red-50 hover:bg-red-100 border border-red-200 transition-all cursor-pointer shadow-2xs animate-pulse" title="Ir a Apartado de Incidencias">
+        <button onclick="switchTab('incidencias')" class="flex items-center gap-2 px-3 py-2 rounded-xl bg-red-50 hover:bg-red-100 border border-red-200 transition-all cursor-pointer shadow-2xs" title="Ir a Apartado de Incidencias">
           <i class="fa-solid fa-triangle-exclamation text-red-600 text-sm"></i>
           <div class="text-left hidden sm:block">
             <p class="text-[10px] font-bold uppercase text-slate-500 leading-none">Incidencias</p>
@@ -504,10 +536,20 @@
           </span>
         </div>
 
-        <!-- SELECTOR INTERACTIVO POR DÍAS DE LA SEMANA -->
-        <div id="filtro-dias-semana-conductor-container" class="flex flex-wrap gap-1.5 border-b border-slate-100 pb-4"></div>
+        <!-- SELECTOR INTERACTIVO POR DÍAS DE LA SEMANA Y ACCIONES DE COLAPSO -->
+        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 pb-4">
+          <div id="filtro-dias-semana-conductor-container" class="flex flex-wrap gap-1.5"></div>
+          <div class="flex items-center gap-1.5 shrink-0 self-end sm:self-auto">
+            <button type="button" onclick="toggleTodosDiasRutas(true)" class="px-2.5 py-1.5 text-xs font-bold text-indigo-700 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 rounded-xl transition-all cursor-pointer flex items-center gap-1.5 shadow-2xs" title="Desplegar todas las tarjetas de días">
+              <i class="fa-solid fa-angles-down text-[10px]"></i> Expandir todos
+            </button>
+            <button type="button" onclick="toggleTodosDiasRutas(false)" class="px-2.5 py-1.5 text-xs font-bold text-slate-600 bg-slate-100 hover:bg-slate-200 border border-slate-200 rounded-xl transition-all cursor-pointer flex items-center gap-1.5 shadow-2xs" title="Colapsar todas las tarjetas de días">
+              <i class="fa-solid fa-angles-up text-[10px]"></i> Colapsar todos
+            </button>
+          </div>
+        </div>
 
-        <div id="contenedor-desglose-rutas-por-dias" class="space-y-6"></div>
+        <div id="contenedor-desglose-rutas-por-dias" class="space-y-5"></div>
       </div>
     </section>
 
@@ -1006,6 +1048,7 @@
 
       <form id="form-cliente" onsubmit="agregarClienteDirecto(event)" class="space-y-4">
         <input type="hidden" id="cli-edit-index" value="">
+        <input type="hidden" id="cli-id" value="">
         <div>
           <label class="block text-xs font-bold uppercase text-slate-500 mb-1.5">Nombre del Cliente / Establecimiento</label>
           <input type="text" id="cli-nombre" required placeholder="Ej: Hotel Meliá Palma" class="w-full bg-slate-50 border border-slate-300 rounded-xl px-3.5 py-2.5 text-sm text-slate-800 focus:border-purple-500">

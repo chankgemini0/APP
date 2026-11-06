@@ -438,47 +438,183 @@ function renderAdminCombustible() {
 
 window.renderAdminCombustible = renderAdminCombustible;
 
-/* --- INCIDENCIAS --- */
+/* --- INCIDENCIAS (SISTEMA EN TIEMPO REAL & REACTIVO) --- */
 window.toggleModalIncidencia = function(show) { 
   const m = document.getElementById('modal-incidencia');
-  if (m) m.classList.toggle('hidden', !show); 
+  if (m) {
+    m.classList.toggle('hidden', !show); 
+    if (show) {
+      // Asegurar que el selector de camión tenga opciones cargadas si aún no las tiene
+      const selCam = document.getElementById('inc-camion');
+      if (selCam && (!selCam.children.length || selCam.children.length === 0)) {
+        const listaCamiones = (typeof window.camiones !== 'undefined' && Array.isArray(window.camiones))
+          ? window.camiones
+          : ((typeof camiones !== 'undefined' && Array.isArray(camiones)) ? camiones : []);
+        if (listaCamiones.length > 0) {
+          selCam.innerHTML = listaCamiones.map(c => `<option value="${c.matricula}">${c.matricula} - ${c.nombre || c.tipo || ''}</option>`).join('');
+        }
+      }
+    }
+  }
+};
+
+window.emitirSincronizacionIncidencia = function(accion, datos) {
+  try {
+    // 1. Despachar evento DOM interno en la ventana actual
+    window.dispatchEvent(new CustomEvent('bugamed:incidencias-sync', {
+      detail: { accion, datos, timestamp: Date.now() }
+    }));
+
+    // 2. Transmisión instantánea entre pestañas/ventanas con BroadcastChannel
+    if (typeof BroadcastChannel !== 'undefined') {
+      const bc = new BroadcastChannel('bugamed_incidencias_channel');
+      bc.postMessage({ accion, datos, timestamp: Date.now() });
+      setTimeout(() => {
+        try { bc.close(); } catch(e) {}
+      }, 200);
+    }
+
+    // 3. Transmisión remota con Supabase Realtime (entre diferentes dispositivos: móvil / PC)
+    if (window._supabase && window.canalRealtimeIncidencias) {
+      window.canalRealtimeIncidencias.send({
+        type: 'broadcast',
+        event: 'incidencia_cambio',
+        payload: { accion, datos, timestamp: Date.now() }
+      }).catch(err => console.warn('Aviso broadcast Supabase incidencias:', err));
+    }
+
+    // 4. Intentar persistencia remota en tabla "incidencias" de Supabase si existe
+    if (accion === 'NUEVA_INCIDENCIA' && window._supabase && datos) {
+      window._supabase.from('incidencias').insert([{
+        id: datos.id,
+        fecha: datos.fecha,
+        categoria: datos.categoria,
+        camion: datos.camion,
+        nota: datos.nota,
+        resuelto: false
+      }]).then(({ error }) => {
+        if (error) {
+          console.warn('Nota: Tabla "incidencias" en Supabase no activa aún. Sincronización mantenida por Realtime/Storage:', error.message);
+        }
+      }).catch(e => console.warn('Supabase incidencias insert:', e));
+    }
+  } catch (err) {
+    console.warn('Aviso en emitirSincronizacionIncidencia:', err);
+  }
 };
 
 window.guardarIncidencia = function(e) {
   if (e) e.preventDefault();
-  incidencias.unshift({
+
+  const catEl = document.getElementById('inc-categoria');
+  const camEl = document.getElementById('inc-camion');
+  const notaEl = document.getElementById('inc-nota');
+
+  const categoria = catEl ? catEl.value : 'Avería General';
+  const camion = camEl ? camEl.value : 'Sin asignar';
+  const nota = notaEl ? notaEl.value.trim() : '';
+
+  if (!nota) {
+    alert('Por favor introduce una breve descripción de la avería o incidencia.');
+    return;
+  }
+
+  const nuevaIncidencia = {
+    id: 'inc_' + Date.now() + '_' + Math.random().toString(36).substr(2, 5),
     fecha: new Date().toISOString().split('T')[0],
-    categoria: document.getElementById('inc-categoria').value,
-    camion: document.getElementById('inc-camion').value,
-    nota: document.getElementById('inc-nota').value,
-    resuelto: false
-  });
-  guardarDatosEnLocal();
+    categoria: categoria,
+    camion: camion,
+    nota: nota,
+    resuelto: false,
+    creadoEn: Date.now()
+  };
+
+  // 1. Actualizar array en memoria
+  if (typeof incidencias === 'undefined' || !Array.isArray(incidencias)) {
+    incidencias = [];
+  }
+  incidencias.unshift(nuevaIncidencia);
+  window.incidencias = incidencias;
+
+  // Registrar ID para efecto visual/animación temporal
+  window.ultimaIncidenciaNuevaId = nuevaIncidencia.id;
+  setTimeout(() => {
+    if (window.ultimaIncidenciaNuevaId === nuevaIncidencia.id) {
+      window.ultimaIncidenciaNuevaId = null;
+      if (typeof renderIncidencias === 'function') renderIncidencias();
+      if (typeof renderSeccionIncidencias === 'function') renderSeccionIncidencias();
+    }
+  }, 7000);
+
+  // 2. Guardar en almacenamiento local (localStorage)
+  if (typeof guardarDatosEnLocal === 'function') {
+    guardarDatosEnLocal();
+  } else {
+    localStorage.setItem('bugamed_incidencias', JSON.stringify(incidencias));
+  }
+
+  // 3. Limpiar formulario y cerrar modal
+  if (notaEl) notaEl.value = '';
   toggleModalIncidencia(false);
-  renderIncidencias();
-  if (document.getElementById('section-incidencias') && !document.getElementById('section-incidencias').classList.contains('hidden')) {
-    renderSeccionIncidencias();
+
+  // 4. Renderizado dinámico inmediato de todas las vistas y KPIs en el DOM
+  if (typeof refrescarModuloIncidencias === 'function') {
+    refrescarModuloIncidencias(nuevaIncidencia);
+  } else {
+    renderIncidencias();
+    if (document.getElementById('section-incidencias') && !document.getElementById('section-incidencias').classList.contains('hidden')) {
+      renderSeccionIncidencias();
+    }
+    if (typeof actualizarKPIs === 'function') actualizarKPIs();
+  }
+
+  // 5. Emitir sincronización en tiempo real para todos los clientes/pantallas conectadas
+  emitirSincronizacionIncidencia('NUEVA_INCIDENCIA', nuevaIncidencia);
+
+  // 6. Notificación visual (Toast informativo)
+  if (typeof mostrarToastLogistica === 'function') {
+    mostrarToastLogistica(`⚠️ ¡Nueva avería reportada! ${nuevaIncidencia.categoria} (${nuevaIncidencia.camion})`);
   }
 };
 
 function renderIncidencias() {
   const container = document.getElementById('lista-incidencias');
   if (!container) return;
-  const enCurso = incidencias.filter(i => !i.resuelto);
+
+  const lista = (typeof window.incidencias !== 'undefined' && Array.isArray(window.incidencias))
+    ? window.incidencias
+    : ((typeof incidencias !== 'undefined' && Array.isArray(incidencias)) ? incidencias : []);
+
+  const enCurso = lista.filter(i => !i.resuelto);
   if (enCurso.length === 0) {
-    container.innerHTML = '<p class="text-xs text-slate-500 italic">Sin incidencias en curso.</p>';
+    container.innerHTML = '<p class="text-xs text-slate-500 italic p-3 bg-slate-50/80 rounded-xl text-center border border-dashed border-slate-200">Sin incidencias en curso.</p>';
     return;
   }
-  container.innerHTML = enCurso.slice(0, 3).map((i, index) => {
-    const originalIndex = incidencias.indexOf(i);
+
+  container.innerHTML = enCurso.slice(0, 3).map((i) => {
+    const originalIndex = lista.indexOf(i);
+    const esReciente = (window.ultimaIncidenciaNuevaId && (i.id === window.ultimaIncidenciaNuevaId)) || i.esReciente;
+
     return `
-      <div class="bg-red-50/50 p-3 rounded-xl border border-red-200 text-xs space-y-1">
-        <div class="flex justify-between font-bold text-slate-800">
-          <span class="text-red-600"><i class="fa-solid fa-triangle-exclamation"></i> ${i.categoria} (${i.camion})</span>
-          <span class="text-slate-500">${i.fecha}</span>
+      <div class="p-3 rounded-xl border text-xs space-y-1.5 transition-all duration-300 ${esReciente ? 'incidencia-nueva-anim border-red-500 bg-red-50/90 shadow-md ring-2 ring-red-400/50' : 'bg-red-50/50 border-red-200'}">
+        <div class="flex justify-between items-center font-bold text-slate-800">
+          <div class="flex items-center gap-1.5 flex-wrap">
+            <span class="text-red-600 flex items-center gap-1 font-extrabold">
+              <i class="fa-solid fa-triangle-exclamation"></i> ${i.categoria}
+            </span>
+            <span class="text-slate-700 bg-white/90 px-1.5 py-0.5 rounded text-[10px] border border-red-200 font-bold">
+              ${i.camion}
+            </span>
+            ${esReciente ? `<span class="bg-red-600 text-white text-[9px] font-black uppercase px-2 py-0.5 rounded-full animate-pulse shadow-xs flex items-center gap-1"><i class="fa-solid fa-bolt text-[8px]"></i> ¡Nueva!</span>` : ''}
+          </div>
+          <span class="text-slate-500 text-[10px] font-medium">${i.fecha || ''}</span>
         </div>
-        <p class="text-slate-600">${i.nota}</p>
-        <button onclick="resolverIncidencia(${originalIndex})" class="mt-1 text-[10px] font-bold bg-emerald-600 text-white px-2.5 py-1 rounded-lg hover:bg-emerald-700 cursor-pointer">✓ Marcar Resuelta</button>
+        <p class="text-slate-600 leading-relaxed">${i.nota || ''}</p>
+        <div class="pt-1 flex justify-between items-center">
+          <button onclick="resolverIncidencia(${originalIndex})" class="text-[10px] font-bold bg-emerald-600 text-white px-2.5 py-1 rounded-lg hover:bg-emerald-700 cursor-pointer transition-colors shadow-2xs flex items-center gap-1">
+            <i class="fa-solid fa-check"></i> Marcar Resuelta
+          </button>
+        </div>
       </div>
     `;
   }).join('');
@@ -628,8 +764,12 @@ function renderSeccionIncidencias() {
   const badgeResueltas = document.getElementById('badge-count-resueltas');
   if (!container) return;
 
-  const enCurso = incidencias.filter(i => !i.resuelto);
-  const resueltas = incidencias.filter(i => i.resuelto);
+  const lista = (typeof window.incidencias !== 'undefined' && Array.isArray(window.incidencias))
+    ? window.incidencias
+    : ((typeof incidencias !== 'undefined' && Array.isArray(incidencias)) ? incidencias : []);
+
+  const enCurso = lista.filter(i => !i.resuelto);
+  const resueltas = lista.filter(i => i.resuelto);
 
   if (badgeCurso) badgeCurso.innerText = enCurso.length;
   if (badgeResueltas) badgeResueltas.innerText = resueltas.length;
@@ -637,37 +777,44 @@ function renderSeccionIncidencias() {
   const listaActual = (filtroIncidenciasTab === 'curso') ? enCurso : resueltas;
 
   if (listaActual.length === 0) {
-    container.innerHTML = `<div class="col-span-full light-card p-10 rounded-2xl text-center text-slate-500 font-medium">No hay incidencias ${filtroIncidenciasTab === 'curso' ? 'en curso' : 'resueltas'}.</div>`;
+    container.innerHTML = `<div class="col-span-full light-card p-10 rounded-2xl text-center text-slate-500 font-medium border border-dashed border-slate-200">No hay incidencias ${filtroIncidenciasTab === 'curso' ? 'en curso' : 'resueltas'}.</div>`;
     return;
   }
 
   container.innerHTML = listaActual.map((i) => {
-    const originalIndex = incidencias.indexOf(i);
+    const originalIndex = lista.indexOf(i);
     const esResuelto = i.resuelto;
+    const esReciente = !esResuelto && ((window.ultimaIncidenciaNuevaId && (i.id === window.ultimaIncidenciaNuevaId)) || i.esReciente);
 
     return `
-      <div class="light-card rounded-2xl p-6 border ${esResuelto ? 'border-emerald-200 bg-emerald-50/20' : 'border-red-200 bg-red-50/10'} space-y-3">
+      <div class="light-card rounded-2xl p-6 border transition-all duration-300 ${esReciente ? 'incidencia-nueva-anim border-red-500 bg-red-50/80 shadow-lg ring-2 ring-red-400/60' : (esResuelto ? 'border-emerald-200 bg-emerald-50/20' : 'border-red-200 bg-red-50/10')} space-y-3">
         <div class="flex justify-between items-start">
-          <span class="px-3 py-1 rounded-full text-xs font-bold ${esResuelto ? 'bg-emerald-100 text-emerald-800' : 'bg-red-100 text-red-800'}">
-            ${esResuelto ? '✓ Resuelta' : '⚠️ En Curso'}
-          </span>
-          <span class="text-xs text-slate-500 font-medium">${i.fecha}</span>
+          <div class="flex items-center gap-2">
+            <span class="px-3 py-1 rounded-full text-xs font-bold ${esResuelto ? 'bg-emerald-100 text-emerald-800' : 'bg-red-100 text-red-800'}">
+              ${esResuelto ? '✓ Resuelta' : '⚠️ En Curso'}
+            </span>
+            ${esReciente ? `<span class="bg-red-600 text-white text-[10px] font-black uppercase px-2.5 py-0.5 rounded-full animate-pulse flex items-center gap-1 shadow-xs"><i class="fa-solid fa-bolt text-[9px]"></i> ¡En Vivo!</span>` : ''}
+          </div>
+          <span class="text-xs text-slate-500 font-medium">${i.fecha || ''}</span>
         </div>
         <div>
-          <h4 class="font-extrabold text-slate-800 text-lg">${i.categoria} <span class="text-sm font-semibold text-slate-500">(${i.camion})</span></h4>
-          <p class="text-xs text-slate-600 mt-1">${i.nota}</p>
+          <h4 class="font-extrabold text-slate-800 text-lg flex items-center gap-2">
+            <span>${i.categoria}</span>
+            <span class="text-sm font-semibold text-slate-500">(${i.camion})</span>
+          </h4>
+          <p class="text-xs text-slate-600 mt-1 leading-relaxed">${i.nota || ''}</p>
         </div>
         <div class="pt-2 border-t border-slate-100 flex justify-between items-center">
           ${!esResuelto ? `
-            <button onclick="resolverIncidencia(${originalIndex})" class="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-xl shadow-2xs cursor-pointer flex items-center gap-1.5">
+            <button onclick="resolverIncidencia(${originalIndex})" class="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-xl shadow-2xs cursor-pointer flex items-center gap-1.5 transition-colors">
               <i class="fa-solid fa-check"></i> Marcar Resuelta
             </button>
           ` : `
-            <button onclick="resolverIncidencia(${originalIndex})" class="px-3 py-1.5 bg-slate-200 hover:bg-slate-300 text-slate-700 text-xs font-bold rounded-xl cursor-pointer">
+            <button onclick="resolverIncidencia(${originalIndex})" class="px-3 py-1.5 bg-slate-200 hover:bg-slate-300 text-slate-700 text-xs font-bold rounded-xl cursor-pointer transition-colors">
               ↺ Reabrir Incidencia
             </button>
           `}
-          <button onclick="eliminarIncidencia(${originalIndex})" class="text-slate-400 hover:text-red-500 text-xs p-1 cursor-pointer" title="Eliminar registro">
+          <button onclick="eliminarIncidencia(${originalIndex})" class="text-slate-400 hover:text-red-500 text-xs p-1 cursor-pointer transition-colors" title="Eliminar registro">
             <i class="fa-solid fa-trash-can"></i>
           </button>
         </div>
@@ -677,23 +824,73 @@ function renderSeccionIncidencias() {
 }
 
 window.resolverIncidencia = function(index) {
-  if (incidencias[index]) {
-    incidencias[index].resuelto = !incidencias[index].resuelto;
-    guardarDatosEnLocal();
-    renderIncidencias();
-    if (document.getElementById('section-incidencias') && !document.getElementById('section-incidencias').classList.contains('hidden')) {
-      renderSeccionIncidencias();
+  const lista = (typeof window.incidencias !== 'undefined' && Array.isArray(window.incidencias))
+    ? window.incidencias
+    : ((typeof incidencias !== 'undefined' && Array.isArray(incidencias)) ? incidencias : []);
+
+  if (lista[index]) {
+    lista[index].resuelto = !lista[index].resuelto;
+    incidencias = lista;
+    window.incidencias = lista;
+
+    if (typeof guardarDatosEnLocal === 'function') {
+      guardarDatosEnLocal();
+    } else {
+      localStorage.setItem('bugamed_incidencias', JSON.stringify(lista));
+    }
+
+    if (typeof refrescarModuloIncidencias === 'function') {
+      refrescarModuloIncidencias();
+    } else {
+      renderIncidencias();
+      if (document.getElementById('section-incidencias') && !document.getElementById('section-incidencias').classList.contains('hidden')) {
+        renderSeccionIncidencias();
+      }
+      if (typeof actualizarKPIs === 'function') actualizarKPIs();
+    }
+
+    if (typeof emitirSincronizacionIncidencia === 'function') {
+      emitirSincronizacionIncidencia('ACTUALIZAR_INCIDENCIAS', lista);
+    }
+
+    if (typeof mostrarToastLogistica === 'function') {
+      mostrarToastLogistica(lista[index].resuelto ? '✓ Incidencia marcada como resuelta' : '↺ Incidencia reabierta');
     }
   }
 };
 
 window.eliminarIncidencia = function(index) {
+  const lista = (typeof window.incidencias !== 'undefined' && Array.isArray(window.incidencias))
+    ? window.incidencias
+    : ((typeof incidencias !== 'undefined' && Array.isArray(incidencias)) ? incidencias : []);
+
   if (confirm('¿Eliminar definitivamente este registro de incidencia?')) {
-    incidencias.splice(index, 1);
-    guardarDatosEnLocal();
-    renderIncidencias();
-    if (document.getElementById('section-incidencias') && !document.getElementById('section-incidencias').classList.contains('hidden')) {
-      renderSeccionIncidencias();
+    lista.splice(index, 1);
+    incidencias = lista;
+    window.incidencias = lista;
+
+    if (typeof guardarDatosEnLocal === 'function') {
+      guardarDatosEnLocal();
+    } else {
+      localStorage.setItem('bugamed_incidencias', JSON.stringify(lista));
+    }
+
+    if (typeof refrescarModuloIncidencias === 'function') {
+      refrescarModuloIncidencias();
+    } else {
+      renderIncidencias();
+      if (document.getElementById('section-incidencias') && !document.getElementById('section-incidencias').classList.contains('hidden')) {
+        renderSeccionIncidencias();
+      }
+      if (typeof actualizarKPIs === 'function') actualizarKPIs();
+    }
+
+    if (typeof emitirSincronizacionIncidencia === 'function') {
+      emitirSincronizacionIncidencia('ACTUALIZAR_INCIDENCIAS', lista);
+    }
+
+    if (typeof mostrarToastLogistica === 'function') {
+      mostrarToastLogistica('🗑️ Registro de incidencia eliminado');
     }
   }
 };
@@ -783,7 +980,7 @@ function renderClientes() {
                 </div>
                 <div class="flex items-center gap-1 shrink-0">
                   <button onclick="abrirModalEditarCliente(${idxOriginal})" class="text-slate-400 hover:text-purple-600 p-1.5 cursor-pointer rounded-lg hover:bg-purple-50 transition-colors" title="Modificar cliente y ubicación GPS"><i class="fa-solid fa-pen-to-square"></i></button>
-                  <button onclick="eliminarClienteAdmin(${idxOriginal})" class="text-slate-400 hover:text-red-500 p-1.5 cursor-pointer rounded-lg hover:bg-red-50 transition-colors" title="Admin: Eliminar cliente"><i class="fa-solid fa-trash-can"></i></button>
+                  <button onclick="eliminarClienteAdmin('${c.id || idxOriginal}')" class="text-slate-400 hover:text-red-500 p-1.5 cursor-pointer rounded-lg hover:bg-red-50 transition-colors" title="Admin: Eliminar cliente"><i class="fa-solid fa-trash-can"></i></button>
                 </div>
               </div>
             `;
@@ -818,6 +1015,7 @@ window.toggleModalCliente = function(show, editIndex = null) {
   const modal = document.getElementById('modal-cliente');
   const form = document.getElementById('form-cliente');
   const inputEditIndex = document.getElementById('cli-edit-index');
+  const inputId = document.getElementById('cli-id');
   const tit = document.getElementById('modal-cliente-titulo');
   const sub = document.getElementById('modal-cliente-subtitulo');
   const btn = document.getElementById('btn-guardar-cliente');
@@ -830,6 +1028,7 @@ window.toggleModalCliente = function(show, editIndex = null) {
       const c = clientes[idx];
       if (c) {
         if (inputEditIndex) inputEditIndex.value = idx;
+        if (inputId) inputId.value = c.id || '';
         const inNombre = document.getElementById('cli-nombre');
         const inZona = document.getElementById('cli-zona');
         const inTipo = document.getElementById('cli-tipo');
@@ -850,6 +1049,7 @@ window.toggleModalCliente = function(show, editIndex = null) {
       }
     } else {
       if (inputEditIndex) inputEditIndex.value = '';
+      if (inputId) inputId.value = '';
       if (form) form.reset();
       const inUbicacion = document.getElementById('cli-ubicacion');
       if (inUbicacion) inUbicacion.value = '';
@@ -867,11 +1067,13 @@ window.abrirModalEditarCliente = function(index) {
   window.toggleModalCliente(true, index);
 };
 
-window.agregarClienteDirecto = function(e) {
+window.agregarClienteDirecto = async function(e) {
   if (e) e.preventDefault();
 
   const inputEditIndex = document.getElementById('cli-edit-index');
   const editIndexVal = inputEditIndex ? inputEditIndex.value : '';
+  const inputId = document.getElementById('cli-id');
+  const idVal = inputId ? inputId.value : '';
 
   const clienteData = {
     nombre: document.getElementById('cli-nombre')?.value.trim() || '',
@@ -887,22 +1089,53 @@ window.agregarClienteDirecto = function(e) {
     return;
   }
 
-  if (editIndexVal !== '' && !isNaN(editIndexVal)) {
-    const idx = parseInt(editIndexVal, 10);
-    if (idx >= 0 && idx < clientes.length) {
-      clientes[idx] = clienteData;
-    } else {
-      clientes.push(clienteData);
-    }
-  } else {
-    clientes.push(clienteData);
+  const btnSubmit = document.getElementById('btn-guardar-cliente');
+  const txtOriginal = btnSubmit ? btnSubmit.innerText : 'Guardar Cliente';
+  if (btnSubmit) {
+    btnSubmit.disabled = true;
+    btnSubmit.innerHTML = '<i class="fa-solid fa-spinner animate-spin"></i> Guardando...';
   }
 
-  guardarDatosEnLocal();
-  if (inputEditIndex) inputEditIndex.value = '';
-  document.getElementById('form-cliente')?.reset();
-  toggleModalCliente(false);
-  renderClientes();
+  try {
+    if (editIndexVal !== '' && !isNaN(editIndexVal)) {
+      const idx = parseInt(editIndexVal, 10);
+      const clienteExistente = clientes[idx];
+      const targetId = idVal || clienteExistente?.id;
+      if (targetId) clienteData.id = targetId;
+
+      if (typeof actualizarClienteSupabase === 'function') {
+        await actualizarClienteSupabase(clienteData, targetId);
+      } else {
+        if (idx >= 0 && idx < clientes.length) {
+          clientes[idx] = { ...clientes[idx], ...clienteData };
+        }
+        guardarDatosEnLocal();
+        renderClientes();
+      }
+    } else {
+      if (typeof insertarClienteSupabase === 'function') {
+        await insertarClienteSupabase(clienteData);
+      } else {
+        clienteData.id = Date.now();
+        clientes.push(clienteData);
+        guardarDatosEnLocal();
+        renderClientes();
+      }
+    }
+
+    if (inputEditIndex) inputEditIndex.value = '';
+    if (inputId) inputId.value = '';
+    document.getElementById('form-cliente')?.reset();
+    toggleModalCliente(false);
+  } catch (err) {
+    console.error('Error al guardar cliente:', err);
+    alert('Error al guardar cliente: ' + (err.message || 'Error desconocido'));
+  } finally {
+    if (btnSubmit) {
+      btnSubmit.disabled = false;
+      btnSubmit.innerText = txtOriginal;
+    }
+  }
 };
 
 window.buscarUbicacionEnMapsForm = function() {
@@ -974,11 +1207,34 @@ window.probarUbicacionMapsForm = function() {
   window.open(url, '_blank');
 };
 
-window.eliminarClienteAdmin = function(index) { 
-  if (confirm('¿Admin: Deseas eliminar este cliente de forma permanente?')) {
-    clientes.splice(index, 1); 
-    guardarDatosEnLocal(); 
-    renderClientes(); 
+window.eliminarClienteAdmin = async function(indexOrId) { 
+  let c = null;
+  let targetId = null;
+  let targetNombre = null;
+
+  if (typeof indexOrId === 'number' || (!isNaN(parseInt(indexOrId)) && String(parseInt(indexOrId)) === String(indexOrId) && clientes[indexOrId])) {
+    c = clientes[indexOrId];
+  } else if (typeof indexOrId === 'string') {
+    c = clientes.find(item => String(item.id) === String(indexOrId)) || clientes[parseInt(indexOrId, 10)];
+  }
+
+  if (c) {
+    targetId = c.id;
+    targetNombre = c.nombre;
+  }
+
+  const nombreMsg = targetNombre ? ` "${targetNombre}"` : '';
+  if (confirm(`¿Admin: Deseas eliminar el cliente${nombreMsg} de forma permanente?`)) {
+    if (typeof eliminarClienteSupabase === 'function') {
+      await eliminarClienteSupabase(targetId, targetNombre);
+    } else {
+      const idxReal = typeof indexOrId === 'number' ? indexOrId : clientes.findIndex(item => String(item.id) === String(targetId));
+      if (idxReal !== -1) {
+        clientes.splice(idxReal, 1);
+        guardarDatosEnLocal();
+        renderClientes();
+      }
+    }
   }
 };
 

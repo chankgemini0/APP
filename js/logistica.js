@@ -1079,10 +1079,20 @@ function asegurarEstructuraVisualizacionRutas() {
           </span>
         </div>
 
-        <!-- SELECTOR INTERACTIVO POR DÍAS DE LA SEMANA -->
-        <div id="filtro-dias-semana-conductor-container" class="flex flex-wrap gap-1.5 border-b border-slate-100 pb-4"></div>
+        <!-- SELECTOR INTERACTIVO POR DÍAS DE LA SEMANA Y ACCIONES DE COLAPSO -->
+        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 pb-4">
+          <div id="filtro-dias-semana-conductor-container" class="flex flex-wrap gap-1.5"></div>
+          <div class="flex items-center gap-1.5 shrink-0 self-end sm:self-auto">
+            <button type="button" onclick="toggleTodosDiasRutas(true)" class="px-2.5 py-1.5 text-xs font-bold text-indigo-700 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 rounded-xl transition-all cursor-pointer flex items-center gap-1.5 shadow-2xs" title="Desplegar todas las tarjetas de días">
+              <i class="fa-solid fa-angles-down text-[10px]"></i> Expandir todos
+            </button>
+            <button type="button" onclick="toggleTodosDiasRutas(false)" class="px-2.5 py-1.5 text-xs font-bold text-slate-600 bg-slate-100 hover:bg-slate-200 border border-slate-200 rounded-xl transition-all cursor-pointer flex items-center gap-1.5 shadow-2xs" title="Colapsar todas las tarjetas de días">
+              <i class="fa-solid fa-angles-up text-[10px]"></i> Colapsar todos
+            </button>
+          </div>
+        </div>
 
-        <div id="contenedor-desglose-rutas-por-dias" class="space-y-6"></div>
+        <div id="contenedor-desglose-rutas-por-dias" class="space-y-5"></div>
       </div>
     `;
     grid = document.getElementById('grid-conductores-rutas') || document.getElementById('grid-choferes-rutas');
@@ -1319,127 +1329,172 @@ window.verDetalleRutasConductor = function(nombreConductor) {
     return;
   }
 
-  // Renderizar las rutas organizadas y separadas por días de la semana
+  // Renderizar las rutas organizadas en bloques desplegables independientes por cada día
   contenedorDias.innerHTML = diasParaMostrar.map(dia => {
     const rutasDelDia = rutasDelConductor.filter(r => r.dia && r.dia.trim().toLowerCase() === dia.trim().toLowerCase());
     const esDiaHoy = (dia === diaHoy);
+    const totalParadasDia = rutasDelDia.reduce((sum, r) => sum + (r.clientes ? r.clientes.length : 0), 0);
+
+    // Estado del desplegable: si no se ha configurado previamente, por defecto abierto para visualización inmediata
+    window.diasDesplegadosRutas = window.diasDesplegadosRutas || {};
+    const estaAbierto = (typeof window.diasDesplegadosRutas[dia] !== 'undefined')
+      ? window.diasDesplegadosRutas[dia]
+      : true;
 
     return `
-      <div class="light-card rounded-2xl p-5 sm:p-6 border ${esDiaHoy ? 'border-indigo-400 ring-2 ring-indigo-100' : 'border-indigo-200'} space-y-4 bg-white shadow-xs">
+      <div class="light-card rounded-2xl border ${esDiaHoy ? 'border-indigo-400 ring-2 ring-indigo-100/70 shadow-md' : 'border-slate-200/90 shadow-xs'} overflow-hidden transition-all bg-white">
         
-        <!-- CABECERA DEL DÍA CON DISTINTIVO -->
-        <div class="flex justify-between items-center border-b border-indigo-100 pb-3">
-          <div class="flex items-center gap-3">
-            <span class="w-3.5 h-3.5 rounded-full ${esDiaHoy ? 'bg-amber-500 animate-pulse' : 'bg-indigo-600'} shrink-0"></span>
-            <div class="flex items-center gap-2">
-              <h4 class="font-black text-blue-950 text-base uppercase tracking-wide flex items-center gap-2">
-                <i class="fa-solid fa-calendar-day text-indigo-600"></i> ${dia}
+        <!-- CABECERA DEL DÍA DESPLEGABLE / COLLAPSIBLE TRIGGER -->
+        <div onclick="toggleDesplegableDiaRutas('${dia}')" class="p-4 sm:p-5 flex items-center justify-between gap-3 cursor-pointer select-none transition-all ${esDiaHoy ? 'bg-gradient-to-r from-indigo-50/70 via-purple-50/30 to-white hover:from-indigo-100/70' : 'bg-gradient-to-r from-slate-50/90 via-slate-50/50 to-white hover:from-slate-100/80'}">
+          <div class="flex items-center gap-3 min-w-0">
+            <span class="w-3.5 h-3.5 rounded-full ${esDiaHoy ? 'bg-amber-500 animate-pulse' : 'bg-indigo-600'} shrink-0 shadow-2xs"></span>
+            <div class="flex items-center gap-2 flex-wrap min-w-0">
+              <h4 class="font-black text-blue-950 text-base sm:text-lg tracking-tight flex items-center gap-2">
+                <i class="fa-solid fa-calendar-day text-indigo-600 text-sm"></i> ${dia}
               </h4>
-              ${esDiaHoy ? '<span class="px-2 py-0.5 bg-amber-100 text-amber-900 border border-amber-300 rounded text-[10px] font-black">JORNADA DE HOY</span>' : ''}
+              ${esDiaHoy ? '<span class="px-2 py-0.5 bg-amber-100 text-amber-900 border border-amber-300 rounded-full text-[10px] font-black uppercase tracking-wider shadow-2xs">Hoy</span>' : ''}
             </div>
           </div>
-          <span class="px-3 py-1 bg-indigo-50 text-indigo-700 border border-indigo-200 rounded-full text-xs font-extrabold">
-            ${rutasDelDia.length} ${rutasDelDia.length === 1 ? 'Ruta Asignada' : 'Rutas Asignadas'}
-          </span>
+
+          <div class="flex items-center gap-2 sm:gap-3 shrink-0">
+            <span class="px-3 py-1 bg-white text-indigo-700 border border-indigo-200 rounded-full text-xs font-extrabold shadow-2xs">
+              <i class="fa-solid fa-route text-indigo-500 mr-1"></i>${rutasDelDia.length} ${rutasDelDia.length === 1 ? 'Ruta' : 'Rutas'}
+            </span>
+            <span class="px-2.5 py-1 bg-slate-100 text-slate-600 rounded-full text-xs font-semibold hidden sm:inline-flex items-center gap-1">
+              <i class="fa-solid fa-store text-slate-400 text-[10px]"></i> ${totalParadasDia} paradas
+            </span>
+            <div id="dia-chevron-${dia}" class="w-8 h-8 rounded-xl bg-white border border-slate-200 text-slate-500 hover:text-indigo-600 flex items-center justify-center transition-transform duration-300 shadow-2xs ${estaAbierto ? 'rotate-180' : ''}">
+              <i class="fa-solid fa-chevron-down text-xs"></i>
+            </div>
+          </div>
         </div>
 
-        <!-- LISTADO DE RUTAS DE ESTE DÍA (SEPARADAS Y ETIQUETADAS COMO 'Ruta 1', 'Ruta 2', etc.) -->
-        <div class="space-y-4">
+        <!-- CONTENIDO COLAPSABLE DE RUTAS DEL DÍA -->
+        <div id="dia-content-${dia}" class="${estaAbierto ? '' : 'hidden'} p-4 sm:p-5 pt-3 border-t border-slate-100 space-y-4 bg-slate-50/40">
           ${rutasDelDia.map((r, rIdx) => {
-            const tipoRutaNorm = r.tipoCliente ? (typeof normalizarTipoCliente === 'function' ? normalizarTipoCliente(r.tipoCliente) : r.tipoCliente) : '';
+            const tipoRutaNorm = r.tipoCliente ? (typeof normalizarTipoCliente === 'function' ? normalizarTipoCliente(r.tipoCliente) : r.tipoCliente) : 'Mixto';
+            let badgeTipoClass = 'bg-emerald-50 text-emerald-700 border-emerald-200';
+            if (tipoRutaNorm === 'Hotel') badgeTipoClass = 'bg-purple-50 text-purple-700 border-purple-200';
+            else if (tipoRutaNorm === 'Restaurante') badgeTipoClass = 'bg-blue-50 text-blue-700 border-blue-200';
+            else if (tipoRutaNorm === 'Camping') badgeTipoClass = 'bg-amber-50 text-amber-700 border-amber-200';
+
+            const clientesRuta = (r.clientes && Array.isArray(r.clientes)) ? r.clientes : [];
+            const nombreRutaDisplay = r.nombre || r.rutaNombre || `Ruta ${rIdx + 1}`;
+
             return `
-            <div class="bg-slate-50/90 rounded-2xl p-4 sm:p-5 border border-slate-200 space-y-3.5 hover:border-indigo-300 transition-all shadow-2xs">
-              
-              <!-- ENCABEZADO DE LA RUTA Y ACCIÓN DE INICIO DIRECTO -->
-              <div class="flex flex-wrap justify-between items-center gap-2 border-b border-slate-200/80 pb-3">
-                <div class="flex items-center gap-2.5 flex-wrap">
-                  <span class="px-3 py-1.5 bg-blue-600 text-white rounded-xl text-xs font-black uppercase tracking-wider flex items-center gap-1.5 shadow-xs">
-                    <i class="fa-solid fa-route"></i> Ruta ${rIdx + 1}
-                  </span>
-                  <span class="px-3 py-1.5 bg-white text-slate-800 rounded-xl text-xs font-bold border border-slate-200 flex items-center gap-1.5 shadow-2xs">
-                    <i class="fa-solid fa-truck text-blue-600"></i> Vehículo: <strong class="text-blue-950">${r.camion || 'No asignado'}</strong>
-                  </span>
-                  ${tipoRutaNorm ? `<span class="px-2.5 py-1 bg-purple-50 text-purple-700 rounded-lg text-xs font-semibold border border-purple-200">${tipoRutaNorm}</span>` : ''}
-                  <span class="text-xs font-bold text-slate-500 bg-white px-2.5 py-1 rounded-lg border border-slate-200">
-                    <i class="fa-solid fa-shop text-slate-400 mr-1"></i>${r.clientes ? r.clientes.length : 0} ${r.clientes && r.clientes.length === 1 ? 'establecimiento' : 'establecimientos'}
-                  </span>
+              <div class="bg-white rounded-2xl border border-slate-200 shadow-xs hover:border-indigo-300 transition-all overflow-hidden">
+                
+                <!-- BARRA HORIZONTAL PRINCIPAL DE LA RUTA -->
+                <div class="p-3.5 sm:p-4 bg-gradient-to-r from-slate-50 via-white to-slate-50/60 border-b border-slate-200/80 flex flex-col md:flex-row md:items-center justify-between gap-3">
+                  <div class="flex items-center gap-2.5 flex-wrap min-w-0">
+                    <span class="px-3.5 py-1.5 bg-blue-600 text-white rounded-xl text-xs font-black uppercase tracking-wider flex items-center gap-1.5 shadow-xs shrink-0">
+                      <i class="fa-solid fa-route text-[11px]"></i> ${nombreRutaDisplay}
+                    </span>
+                    <span class="px-3 py-1.5 bg-white text-slate-800 rounded-xl text-xs font-bold border border-slate-200/90 flex items-center gap-1.5 shadow-2xs shrink-0">
+                      <i class="fa-solid fa-truck text-indigo-600"></i> Vehículo: <strong class="text-blue-950 font-extrabold">${r.camion || 'No asignado'}</strong>
+                    </span>
+                    <span class="px-2.5 py-1.5 ${badgeTipoClass} rounded-xl text-xs font-bold border flex items-center gap-1 shrink-0">
+                      <i class="fa-solid fa-tag text-[10px]"></i> ${tipoRutaNorm}
+                    </span>
+                    <span class="px-2.5 py-1.5 bg-indigo-50/80 text-indigo-700 border border-indigo-200/80 rounded-xl text-xs font-extrabold flex items-center gap-1.5 shrink-0">
+                      <i class="fa-solid fa-store text-indigo-500 text-[11px]"></i> ${clientesRuta.length} ${clientesRuta.length === 1 ? 'establecimiento' : 'establecimientos'}
+                    </span>
+                  </div>
+
+                  <!-- BOTÓN DE ACCIÓN PRINCIPAL ALINEADO A LA DERECHA -->
+                  <div class="shrink-0 flex items-center justify-end md:ml-auto">
+                    <button type="button" onclick="iniciarRutaDirectaDesdePortal('${ch.nombre.replace(/'/g, "\\'")}', '${dia}', ${rIdx}, '${r.id || ''}')" class="w-full sm:w-auto px-4 py-2 bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 text-white rounded-xl text-xs font-extrabold flex items-center justify-center gap-2 shadow-xs hover:shadow-md transition-all cursor-pointer hover:scale-[1.02] active:scale-[0.98]" title="Iniciar esta ruta en el Terminal de Logística">
+                      <i class="fa-solid fa-play text-[10px]"></i> Iniciar Esta Ruta
+                    </button>
+                  </div>
                 </div>
 
-                <!-- BOTÓN PARA INICIAR ESTA RUTA DIRECTAMENTE DESDE EL PORTAL -->
-                <button type="button" onclick="iniciarRutaDirectaDesdePortal('${ch.nombre.replace(/'/g, "\\'")}', '${dia}', ${rIdx}, '${r.id || ''}')" class="px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-extrabold flex items-center gap-1.5 shadow-xs transition-all cursor-pointer hover:scale-105 active:scale-95" title="Iniciar esta ruta en el Terminal de Logística">
-                  <i class="fa-solid fa-play text-[10px]"></i> Iniciar Esta Ruta
-                </button>
-              </div>
+                <!-- LISTADO VERTICAL DE ESTABLECIMIENTOS / PARADAS -->
+                <div class="p-3 sm:p-4">
+                  ${clientesRuta.length === 0 ? `
+                    <div class="p-5 text-center text-xs text-slate-400 italic bg-slate-50/60 rounded-xl border border-dashed border-slate-200">
+                      <i class="fa-solid fa-store-slash text-slate-300 text-base mb-1 block"></i>
+                      No hay establecimientos o paradas asignadas a esta ruta.
+                    </div>
+                  ` : `
+                    <div class="space-y-1.5">
+                      <div class="flex items-center justify-between text-[11px] font-extrabold uppercase text-slate-500 tracking-wider px-1 pb-1">
+                        <span class="flex items-center gap-1.5 text-slate-600">
+                          <i class="fa-solid fa-list-ol text-indigo-500"></i> Paradas programadas (${clientesRuta.length})
+                        </span>
+                        <span class="text-[10px] text-slate-400 font-medium lowercase">orden de entrega / recogida</span>
+                      </div>
 
-              <!-- PARADAS / ESTABLECIMIENTOS ASIGNADOS A ESTA RUTA EN REJILLA COMPACTA -->
-              <div>
-                <p class="text-[11px] font-extrabold uppercase text-slate-500 tracking-wider mb-2.5 flex items-center gap-1.5">
-                  <i class="fa-solid fa-list-check text-indigo-500"></i> Paradas y Establecimientos en esta ruta:
-                </p>
-                ${(!r.clientes || r.clientes.length === 0) 
-                  ? '<p class="text-xs text-slate-400 italic py-2">No hay establecimientos asignados a esta ruta.</p>'
-                  : `
-                    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-2.5">
-                      ${r.clientes.map((clienteItem, cIdx) => {
-                        const clienteNombre = typeof clienteItem === 'object' && clienteItem !== null ? (clienteItem.nombre || clienteItem.name || '') : String(clienteItem || '');
-                        const cliInfo = (typeof clientes !== 'undefined' && Array.isArray(clientes)) 
-                          ? clientes.find(c => c.nombre && c.nombre.trim().toLowerCase() === clienteNombre.trim().toLowerCase()) 
-                          : null;
+                      <div class="bg-white rounded-xl border border-slate-200 divide-y divide-slate-100 overflow-hidden shadow-2xs">
+                        ${clientesRuta.map((clienteItem, cIdx) => {
+                          const clienteNombre = typeof clienteItem === 'object' && clienteItem !== null ? (clienteItem.nombre || clienteItem.name || '') : String(clienteItem || '');
+                          const cliInfo = (typeof clientes !== 'undefined' && Array.isArray(clientes)) 
+                            ? clientes.find(c => c.nombre && c.nombre.trim().toLowerCase() === clienteNombre.trim().toLowerCase()) 
+                            : null;
 
-                        const tipoNorm = cliInfo && cliInfo.tipo 
-                          ? (typeof normalizarTipoCliente === 'function' ? normalizarTipoCliente(cliInfo.tipo) : cliInfo.tipo) 
-                          : (r.tipoCliente ? (typeof normalizarTipoCliente === 'function' ? normalizarTipoCliente(r.tipoCliente) : r.tipoCliente) : '');
-                        let badgeColor = 'bg-slate-100 text-slate-700 border-slate-200';
-                        if (tipoNorm === 'Hotel') badgeColor = 'bg-purple-100 text-purple-700 border-purple-200';
-                        if (tipoNorm === 'Restaurante') badgeColor = 'bg-blue-100 text-blue-700 border-blue-200';
-                        if (tipoNorm === 'Camping') badgeColor = 'bg-amber-100 text-amber-700 border-amber-200';
-                        if (tipoNorm === 'Mixto') badgeColor = 'bg-emerald-100 text-emerald-700 border-emerald-200';
+                          const tipoNormCliente = cliInfo && cliInfo.tipo 
+                            ? (typeof normalizarTipoCliente === 'function' ? normalizarTipoCliente(cliInfo.tipo) : cliInfo.tipo) 
+                            : tipoRutaNorm;
 
-                        return `
-                          <div class="bg-white p-3 rounded-xl border border-slate-200 hover:border-indigo-300 transition-all flex flex-col justify-between gap-2 shadow-2xs group">
-                            
-                            <!-- INFORMACIÓN DEL CLIENTE -->
-                            <div class="space-y-1">
-                              <div class="flex items-center justify-between gap-1">
-                                <span class="w-5 h-5 rounded-md bg-blue-100 text-blue-800 font-black flex items-center justify-center text-[10px] shrink-0">
+                          let badgeCliClass = 'bg-emerald-50 text-emerald-700 border-emerald-200';
+                          if (tipoNormCliente === 'Hotel') badgeCliClass = 'bg-purple-50 text-purple-700 border-purple-200';
+                          else if (tipoNormCliente === 'Restaurante') badgeCliClass = 'bg-blue-50 text-blue-700 border-blue-200';
+                          else if (tipoNormCliente === 'Camping') badgeCliClass = 'bg-amber-50 text-amber-700 border-amber-200';
+
+                          const direccionTexto = (cliInfo && (cliInfo.direccion || cliInfo.zona))
+                            ? `${cliInfo.zona ? cliInfo.zona + ' · ' : ''}${cliInfo.direccion || ''}`
+                            : '';
+
+                          return `
+                            <div class="p-3 sm:px-4 sm:py-2.5 hover:bg-indigo-50/30 transition-colors flex items-center justify-between gap-3 group">
+                              <!-- Identificación numerada y detalles del cliente -->
+                              <div class="flex items-center gap-3 min-w-0 flex-1">
+                                <span class="w-6 h-6 rounded-lg bg-indigo-50 border border-indigo-100 text-indigo-700 font-black text-xs flex items-center justify-center shrink-0 shadow-2xs group-hover:bg-indigo-600 group-hover:text-white transition-colors">
                                   ${cIdx + 1}
                                 </span>
-                                ${tipoNorm ? `<span class="text-[9px] px-1.5 py-0.5 rounded font-extrabold border ${badgeColor}">${tipoNorm}</span>` : ''}
+                                <div class="min-w-0 flex-1">
+                                  <div class="flex items-center gap-2 flex-wrap">
+                                    <span class="font-bold text-slate-800 text-sm truncate group-hover:text-indigo-950 transition-colors" title="${clienteNombre}">
+                                      ${clienteNombre}
+                                    </span>
+                                    <span class="text-[10px] px-2 py-0.5 rounded font-extrabold border ${badgeCliClass}">
+                                      ${tipoNormCliente}
+                                    </span>
+                                  </div>
+                                  ${direccionTexto ? `
+                                    <p class="text-[11px] text-slate-400 truncate flex items-center gap-1 mt-0.5" title="${direccionTexto}">
+                                      <i class="fa-solid fa-location-dot text-slate-300 text-[10px]"></i> ${direccionTexto}
+                                    </p>
+                                  ` : `
+                                    <p class="text-[11px] text-slate-300 italic mt-0.5">Sin dirección registrada</p>
+                                  `}
+                                </div>
                               </div>
-                              <p class="font-extrabold text-slate-800 text-xs truncate" title="${clienteNombre}">
-                                ${clienteNombre}
-                              </p>
-                              ${cliInfo && (cliInfo.zona || cliInfo.direccion) ? `
-                                <p class="text-[10px] text-slate-400 truncate" title="${cliInfo.zona || ''} ${cliInfo.direccion || ''}">
-                                  <i class="fa-solid fa-location-dot text-slate-300 mr-1"></i>${cliInfo.zona ? cliInfo.zona + ' ' : ''}${cliInfo.direccion ? '• ' + cliInfo.direccion : ''}
-                                </p>
-                              ` : '<p class="text-[10px] text-slate-300 italic">Sin dirección</p>'}
-                            </div>
 
-                            <!-- ACCIONES DIRECTAS (GPS COMPACTO Y TELÉFONO) -->
-                            <div class="flex items-center justify-end gap-1.5 pt-1.5 border-t border-slate-100">
-                              <button type="button" onclick="abrirNavegacionGPSCliente('${clienteNombre.replace(/'/g, "\\'")}')" class="w-6 h-6 bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 text-white rounded-lg flex items-center justify-center shadow-2xs transition-all cursor-pointer hover:scale-110 shrink-0" title="Abrir en Google Maps" aria-label="Abrir en Google Maps">
-                                <i class="fa-solid fa-location-dot text-xs"></i>
-                              </button>
-                              ${cliInfo && cliInfo.telefono ? `
-                                <a href="tel:${cliInfo.telefono}" class="w-6 h-6 bg-blue-50 hover:bg-blue-100 text-blue-700 rounded-lg flex items-center justify-center border border-blue-200 transition-colors shadow-2xs hover:scale-110 shrink-0" title="Llamar: ${cliInfo.telefono}" aria-label="Llamar">
-                                  <i class="fa-solid fa-phone text-[10px]"></i>
-                                </a>
-                              ` : ''}
+                              <!-- Acciones discretas de ubicación y contacto -->
+                              <div class="flex items-center gap-1.5 shrink-0">
+                                <button type="button" onclick="abrirNavegacionGPSCliente('${clienteNombre.replace(/'/g, "\\'")}')" class="w-8 h-8 rounded-lg bg-slate-100 hover:bg-emerald-50 hover:text-emerald-600 active:bg-emerald-100 text-slate-500 border border-slate-200 transition-all flex items-center justify-center cursor-pointer hover:border-emerald-300 shadow-2xs" title="Abrir ubicación en Google Maps" aria-label="Google Maps">
+                                  <i class="fa-solid fa-location-dot text-xs"></i>
+                                </button>
+                                ${cliInfo && cliInfo.telefono ? `
+                                  <a href="tel:${cliInfo.telefono}" class="w-8 h-8 rounded-lg bg-slate-100 hover:bg-blue-50 hover:text-blue-600 active:bg-blue-100 text-slate-500 border border-slate-200 transition-all flex items-center justify-center hover:border-blue-300 shadow-2xs" title="Llamar: ${cliInfo.telefono}" aria-label="Teléfono">
+                                    <i class="fa-solid fa-phone text-xs"></i>
+                                  </a>
+                                ` : ''}
+                              </div>
                             </div>
-
-                          </div>
-                        `;
-                      }).join('')}
+                          `;
+                        }).join('')}
+                      </div>
                     </div>
-                  `
-                }
-              </div>
+                  `}
+                </div>
 
-            </div>
-          `;
-        }).join('')}
+              </div>
+            `;
+          }).join('')}
         </div>
+
       </div>
     `;
   }).join('');
@@ -1457,6 +1512,43 @@ window.cerrarDetalleRutasConductor = function() {
   if (panel) panel.classList.add('hidden');
 };
 window.cerrarDetalleRutasChofer = window.cerrarDetalleRutasConductor;
+
+/* Control interactivo de colapso/despliegue de días */
+window.diasDesplegadosRutas = window.diasDesplegadosRutas || {};
+
+window.toggleDesplegableDiaRutas = function(dia) {
+  const content = document.getElementById(`dia-content-${dia}`);
+  const chevron = document.getElementById(`dia-chevron-${dia}`);
+  if (!content) return;
+
+  const estaOculto = content.classList.contains('hidden');
+  if (estaOculto) {
+    content.classList.remove('hidden');
+    if (chevron) chevron.classList.add('rotate-180');
+    window.diasDesplegadosRutas[dia] = true;
+  } else {
+    content.classList.add('hidden');
+    if (chevron) chevron.classList.remove('rotate-180');
+    window.diasDesplegadosRutas[dia] = false;
+  }
+};
+
+window.toggleTodosDiasRutas = function(abrir) {
+  const conts = document.querySelectorAll('[id^="dia-content-"]');
+  conts.forEach(c => {
+    const d = c.id.replace('dia-content-', '');
+    const chev = document.getElementById(`dia-chevron-${d}`);
+    if (abrir) {
+      c.classList.remove('hidden');
+      if (chev) chev.classList.add('rotate-180');
+      window.diasDesplegadosRutas[d] = true;
+    } else {
+      c.classList.add('hidden');
+      if (chev) chev.classList.remove('rotate-180');
+      window.diasDesplegadosRutas[d] = false;
+    }
+  });
+};
 
 // Aliases para compatibilidad con llamadas existentes en el proyecto
 window.actualizarSelectPortalConductores = window.renderVisualizacionRutasConductores;

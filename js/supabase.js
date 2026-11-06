@@ -61,6 +61,8 @@ window._supabase = _supabase;
 let canalRealtimeRutas = null;
 let canalRealtimeRepostajes = null;
 let canalRealtimeConductores = null;
+let canalRealtimeClientes = null;
+let canalRealtimeIncidencias = null;
 const conductoresEliminadosSet = new Set();
 
 /**
@@ -2738,6 +2740,501 @@ function refrescarVistasConductores() {
   } catch (e) {}
 }
 
+/* ==========================================================================
+   SINCRONIZACIÓN Y TIEMPO REAL DE LA TABLA "clientes"
+   ========================================================================== */
+
+/**
+ * Normaliza un registro de cliente proveniente de Supabase al formato de la aplicación.
+ */
+function mapearClienteDesdeSupabase(c) {
+  if (!c) return null;
+  return {
+    id: c.id,
+    created_at: c.created_at || new Date().toISOString(),
+    nombre: (c.nombre || c.name || '').toString().trim(),
+    zona: (c.zona || 'Sin Zona Asignada').toString().trim(),
+    tipo: (typeof normalizarTipoCliente === 'function' ? normalizarTipoCliente(c.tipo) : (c.tipo || 'Hotel')),
+    direccion: (c.direccion || '').toString().trim(),
+    telefono: (c.telefono || '').toString().trim(),
+    ubicacion: (c.ubicacion || '').toString().trim()
+  };
+}
+
+/**
+ * 1. SELECT: Obtener todos los clientes desde la tabla "clientes" de Supabase al iniciar la aplicación
+ */
+async function cargarClientesDesdeSupabase() {
+  if (!_supabase) {
+    console.warn('⚠️ Supabase no disponible para cargar clientes.');
+    return;
+  }
+
+  try {
+    console.log('🔄 Consultando clientes desde tabla "clientes" de Supabase...');
+    const { data, error } = await _supabase
+      .from('clientes')
+      .select('*')
+      .order('created_at', { ascending: true });
+
+    if (error) {
+      if (error.code === 'PGRST205' || (error.message && error.message.includes('schema cache'))) {
+        console.warn('ℹ️ La tabla "clientes" aún no ha sido creada en Supabase. Operando con datos locales temporalmente.');
+        return;
+      }
+      if (error.code === '42501' || (error.message && error.message.includes('row-level security')) || error.code === 'PGRST301') {
+        console.warn('ℹ️ Políticas RLS activas en tabla "clientes". Operando con datos locales temporalmente:', error.message);
+        return;
+      }
+      console.error('❌ Error al consultar clientes en Supabase:', error.message);
+      return;
+    }
+
+    if (data && Array.isArray(data)) {
+      if (data.length > 0) {
+        console.log(`✓ ${data.length} clientes cargados exitosamente desde Supabase:`, data);
+        const mapeados = data.map(mapearClienteDesdeSupabase).filter(Boolean);
+        clientes = mapeados;
+        window.clientes = clientes;
+        if (typeof guardarDatosEnLocal === 'function') guardarDatosEnLocal();
+      } else {
+        console.log('Tabla "clientes" en Supabase vacía. Migrando clientes locales iniciales...');
+        await migrarClientesInicialesASupabase();
+      }
+      refrescarVistasClientes();
+    }
+  } catch (err) {
+    console.error('Excepción al cargar clientes desde Supabase:', err);
+  }
+}
+
+/**
+ * Migra los clientes locales iniciales a la tabla "clientes" de Supabase si está recién creada y vacía
+ */
+async function migrarClientesInicialesASupabase() {
+  if (!_supabase || typeof clientes === 'undefined' || !Array.isArray(clientes) || clientes.length === 0) return;
+
+  try {
+    const filasParaInsertar = clientes.map(c => ({
+      nombre: (c.nombre || '').trim(),
+      zona: (c.zona || 'Sin Zona Asignada').trim(),
+      tipo: (typeof normalizarTipoCliente === 'function' ? normalizarTipoCliente(c.tipo) : (c.tipo || 'Hotel')),
+      direccion: (c.direccion || '').trim(),
+      telefono: (c.telefono || '').trim(),
+      ubicacion: (c.ubicacion || '').trim()
+    })).filter(c => c.nombre);
+
+    if (filasParaInsertar.length === 0) return;
+
+    let { data, error } = await _supabase
+      .from('clientes')
+      .insert(filasParaInsertar)
+      .select();
+
+    if (error && (error.code === '42501' || (error.message && error.message.includes('row-level security')))) {
+      console.warn('ℹ️ [RLS Activo] La tabla "clientes" en Supabase requiere política de INSERT para anon o desactivar RLS.');
+      return;
+    }
+
+    if (!error && data && data.length > 0) {
+      console.log(`✓ ${data.length} clientes iniciales migrados exitosamente a Supabase.`);
+      clientes = data.map(mapearClienteDesdeSupabase).filter(Boolean);
+      window.clientes = clientes;
+      if (typeof guardarDatosEnLocal === 'function') guardarDatosEnLocal();
+    }
+  } catch (e) {
+    console.error('Error durante la migración de clientes a Supabase:', e);
+  }
+}
+
+/**
+ * 2. INSERT: Registrar un nuevo cliente en Supabase de forma asíncrona
+ */
+async function insertarClienteSupabase(clienteData) {
+  if (!clienteData || !clienteData.nombre) {
+    return { data: null, error: new Error('Nombre de cliente requerido') };
+  }
+
+  const nombre = clienteData.nombre.trim();
+  const zona = (clienteData.zona || 'Sin Zona Asignada').trim();
+  const tipo = (typeof normalizarTipoCliente === 'function' ? normalizarTipoCliente(clienteData.tipo) : (clienteData.tipo || 'Hotel'));
+  const direccion = (clienteData.direccion || '').trim();
+  const telefono = (clienteData.telefono || '').trim();
+  const ubicacion = (clienteData.ubicacion || '').trim();
+
+  // 1. Inserción optimista en memoria local
+  const tempId = 'temp_cli_' + Date.now() + '_' + Math.random().toString(36).substr(2, 5);
+  const nuevoLocal = {
+    id: tempId,
+    created_at: new Date().toISOString(),
+    nombre,
+    zona,
+    tipo,
+    direccion,
+    telefono,
+    ubicacion
+  };
+
+  let lista = (typeof clientes !== 'undefined' && Array.isArray(clientes)) ? clientes : [];
+  lista.push(nuevoLocal);
+  clientes = lista;
+  window.clientes = lista;
+  if (typeof guardarDatosEnLocal === 'function') guardarDatosEnLocal();
+  refrescarVistasClientes();
+
+  if (!_supabase) {
+    console.warn('⚠️ Supabase no disponible; el cliente se guardó únicamente en local.');
+    return { data: [nuevoLocal], error: null, id: tempId, ...nuevoLocal };
+  }
+
+  try {
+    const payload = {
+      nombre,
+      zona,
+      tipo,
+      direccion,
+      telefono,
+      ubicacion
+    };
+
+    console.log('🚀 Insertando cliente en Supabase (tabla "clientes"):', payload);
+    const { data, error } = await _supabase
+      .from('clientes')
+      .insert([payload])
+      .select();
+
+    if (error) {
+      console.error('❌ Error al insertar cliente en Supabase:', error.message);
+      if (typeof mostrarToastLogistica === 'function') {
+        if (error.code === 'PGRST205') {
+          mostrarToastLogistica('⚠️ Falta crear la tabla "clientes" en Supabase. Guardado localmente.');
+        } else if (error.code === '42501' || (error.message && error.message.includes('row-level security'))) {
+          mostrarToastLogistica('⚠️ RLS activo en "clientes". Guardado localmente. Revisa las políticas.');
+        } else {
+          mostrarToastLogistica(`⚠️ Error en Supabase al registrar cliente: ${error.message}`);
+        }
+      }
+      return { data: [nuevoLocal], error, id: tempId, ...nuevoLocal };
+    }
+
+    if (data && data[0]) {
+      const creado = data[0];
+      const mapeado = mapearClienteDesdeSupabase(creado);
+
+      // Reemplazar registro temporal por el ID asignado por Supabase
+      const idxTemp = lista.findIndex(c => String(c.id) === String(tempId));
+      if (idxTemp !== -1) {
+        lista[idxTemp] = mapeado;
+      }
+      clientes = lista;
+      window.clientes = lista;
+      if (typeof guardarDatosEnLocal === 'function') guardarDatosEnLocal();
+      refrescarVistasClientes();
+      console.log('✓ Cliente confirmado e insertado en Supabase con ID:', creado.id);
+      return { data: [creado], error: null, id: creado.id, ...mapeado };
+    }
+  } catch (err) {
+    console.error('Excepción al insertar cliente en Supabase:', err);
+  }
+
+  return { data: [nuevoLocal], error: null, id: tempId, ...nuevoLocal };
+}
+
+/**
+ * 3. UPDATE: Actualizar datos de un cliente existente en Supabase de forma asíncrona
+ */
+async function actualizarClienteSupabase(clienteData, id = null) {
+  if (!clienteData) return { data: null, error: new Error('Datos de cliente vacíos') };
+
+  const idTarget = id || clienteData.id;
+  const nombre = (clienteData.nombre || '').trim();
+  const zona = (clienteData.zona || 'Sin Zona Asignada').trim();
+  const tipo = (typeof normalizarTipoCliente === 'function' ? normalizarTipoCliente(clienteData.tipo) : (clienteData.tipo || 'Hotel'));
+  const direccion = (clienteData.direccion || '').trim();
+  const telefono = (clienteData.telefono || '').trim();
+  const ubicacion = (clienteData.ubicacion || '').trim();
+
+  let lista = (typeof clientes !== 'undefined' && Array.isArray(clientes)) ? clientes : [];
+  const idx = lista.findIndex(c => String(c.id) === String(idTarget) || (c.nombre && c.nombre.trim().toLowerCase() === nombre.toLowerCase()));
+
+  if (idx !== -1) {
+    lista[idx] = { ...lista[idx], ...clienteData, nombre, zona, tipo, direccion, telefono, ubicacion };
+    clientes = lista;
+    window.clientes = lista;
+    if (typeof guardarDatosEnLocal === 'function') guardarDatosEnLocal();
+    refrescarVistasClientes();
+  }
+
+  if (!_supabase) return { data: [clienteData], error: null };
+
+  const esIdValido = idTarget && !String(idTarget).startsWith('temp_cli_');
+
+  try {
+    const payload = {
+      nombre,
+      zona,
+      tipo,
+      direccion,
+      telefono,
+      ubicacion
+    };
+
+    let query = null;
+    if (esIdValido) {
+      query = _supabase.from('clientes').update(payload).eq('id', idTarget);
+    } else {
+      query = _supabase.from('clientes').update(payload).eq('nombre', nombre);
+    }
+
+    const { data, error } = await query.select();
+
+    if (error) {
+      console.error('❌ Error al actualizar cliente en Supabase:', error.message);
+      return { data: null, error };
+    }
+
+    if (data && data[0]) {
+      const mapeado = mapearClienteDesdeSupabase(data[0]);
+      if (idx !== -1) {
+        lista[idx] = mapeado;
+        clientes = lista;
+        window.clientes = lista;
+        if (typeof guardarDatosEnLocal === 'function') guardarDatosEnLocal();
+        refrescarVistasClientes();
+      }
+      console.log('✓ Cliente actualizado en Supabase:', data[0]);
+      return { data, error: null, id: data[0].id, ...mapeado };
+    }
+  } catch (err) {
+    console.error('Excepción al actualizar cliente en Supabase:', err);
+    return { data: null, error: err };
+  }
+
+  return { data: [clienteData], error: null };
+}
+
+/**
+ * 4. DELETE: Eliminar un registro de la tabla "clientes" en Supabase de forma asíncrona
+ */
+async function eliminarClienteSupabase(idDelRegistro, nombre = null) {
+  if (!idDelRegistro && !nombre) {
+    return { success: false, error: new Error('ID o Nombre de cliente no especificado') };
+  }
+
+  // Si es un id temporal local, borrar de memoria inmediatamente
+  if (idDelRegistro && String(idDelRegistro).startsWith('temp_cli_')) {
+    clientes = clientes.filter(c => String(c.id) !== String(idDelRegistro));
+    window.clientes = clientes;
+    if (typeof guardarDatosEnLocal === 'function') guardarDatosEnLocal();
+    refrescarVistasClientes();
+    return { success: true };
+  }
+
+  // Eliminación optimista en memoria local
+  let lista = (typeof clientes !== 'undefined' && Array.isArray(clientes)) ? clientes : [];
+  lista = lista.filter(c => {
+    if (idDelRegistro && String(c.id) === String(idDelRegistro)) return false;
+    if (nombre && c.nombre && c.nombre.trim().toLowerCase() === nombre.trim().toLowerCase()) return false;
+    return true;
+  });
+  clientes = lista;
+  window.clientes = lista;
+  if (typeof guardarDatosEnLocal === 'function') guardarDatosEnLocal();
+  refrescarVistasClientes();
+
+  if (!_supabase) return { success: true };
+
+  try {
+    console.log(`🗑️ Eliminando cliente en Supabase (tabla "clientes")...`, { id: idDelRegistro, nombre });
+    let query = null;
+    const esIdValido = idDelRegistro !== undefined && idDelRegistro !== null && !String(idDelRegistro).startsWith('temp_');
+
+    if (esIdValido) {
+      query = _supabase.from('clientes').delete().eq('id', idDelRegistro);
+    } else if (nombre) {
+      query = _supabase.from('clientes').delete().eq('nombre', nombre);
+    }
+
+    if (query) {
+      const { error } = await query;
+      if (error) {
+        console.error(`❌ Error al eliminar cliente ${idDelRegistro || nombre} en Supabase:`, error.message);
+        if (typeof mostrarToastLogistica === 'function') {
+          mostrarToastLogistica(`⚠️ Error en Supabase al eliminar cliente: ${error.message}`);
+        }
+        return { success: false, error };
+      }
+      console.log(`✓ Cliente ${idDelRegistro || nombre} eliminado exitosamente en Supabase.`);
+      return { success: true };
+    }
+  } catch (err) {
+    console.error(`❌ Excepción al eliminar cliente en Supabase:`, err);
+    return { success: false, error: err };
+  }
+
+  return { success: true };
+}
+
+/**
+ * 5. REALTIME: Suscribirse a cambios en tiempo real en la tabla "clientes"
+ * Escucha todos los eventos utilizando { event: '*', schema: 'public', table: 'clientes' }
+ */
+function suscribirClientesRealtime() {
+  if (!_supabase) {
+    console.warn('⚠️ Cliente Supabase no disponible para Realtime de clientes.');
+    return null;
+  }
+
+  if (canalRealtimeClientes) {
+    console.log('🔄 Removiendo canal Realtime de clientes previo...');
+    try {
+      _supabase.removeChannel(canalRealtimeClientes);
+    } catch (e) {
+      console.warn('Error al remover canal Realtime anterior de clientes:', e);
+    }
+    canalRealtimeClientes = null;
+  }
+
+  console.log('📡 Conectando canal Realtime "bugamed-clientes-realtime" para tabla "clientes"...');
+  canalRealtimeClientes = _supabase
+    .channel('bugamed-clientes-realtime')
+    .on(
+      'postgres_changes',
+      { event: '*', schema: 'public', table: 'clientes' },
+      payload => {
+        console.log(`⚡ [Realtime Clientes] Evento recibido: [${payload.eventType}]`, payload);
+        procesarEventoRealtimeClientes(payload);
+      }
+    )
+    .subscribe((status, err) => {
+      console.log('📡 Estado conexión Realtime Clientes:', status);
+      if (err) console.error('❌ Error en canal Realtime Clientes:', err);
+      else if (status === 'SUBSCRIBED') console.log('✓ [Realtime Clientes] Canal suscrito exitosamente (SUBSCRIBED)');
+    });
+
+  return canalRealtimeClientes;
+}
+
+/**
+ * Procesa los eventos entrantes de Supabase Realtime para la tabla "clientes" (INSERT, UPDATE, DELETE).
+ */
+function procesarEventoRealtimeClientes(payload) {
+  if (!payload) return;
+  const eventType = payload.eventType;
+  const nuevoRegistro = payload.new;
+  const viejoRegistro = payload.old;
+
+  let lista = (typeof window.clientes !== 'undefined' && Array.isArray(window.clientes))
+    ? window.clientes
+    : ((typeof clientes !== 'undefined' && Array.isArray(clientes)) ? clientes : []);
+
+  if (eventType === 'INSERT' && nuevoRegistro) {
+    const mapeado = mapearClienteDesdeSupabase(nuevoRegistro);
+    const yaExiste = lista.some(c => String(c.id) === String(mapeado.id));
+    if (!yaExiste) {
+      lista.push(mapeado);
+      clientes = lista;
+      window.clientes = lista;
+      if (typeof guardarDatosEnLocal === 'function') guardarDatosEnLocal();
+      refrescarVistasClientes();
+      if (typeof mostrarToastLogistica === 'function') {
+        mostrarToastLogistica(`⚡ Nuevo cliente en vivo: ${mapeado.nombre}`);
+      }
+    }
+  } else if (eventType === 'UPDATE' && nuevoRegistro) {
+    const mapeado = mapearClienteDesdeSupabase(nuevoRegistro);
+    const idx = lista.findIndex(c => String(c.id) === String(mapeado.id) || (c.nombre && c.nombre.trim().toLowerCase() === mapeado.nombre.trim().toLowerCase()));
+    if (idx !== -1) {
+      lista[idx] = mapeado;
+    } else {
+      lista.push(mapeado);
+    }
+    clientes = lista;
+    window.clientes = lista;
+    if (typeof guardarDatosEnLocal === 'function') guardarDatosEnLocal();
+    refrescarVistasClientes();
+    if (typeof mostrarToastLogistica === 'function') {
+      mostrarToastLogistica(`⚡ Cliente actualizado: ${mapeado.nombre}`);
+    }
+  } else if (eventType === 'DELETE' && viejoRegistro) {
+    const idEliminar = viejoRegistro.id;
+    lista = lista.filter(c => String(c.id) !== String(idEliminar));
+    clientes = lista;
+    window.clientes = lista;
+    if (typeof guardarDatosEnLocal === 'function') guardarDatosEnLocal();
+    refrescarVistasClientes();
+    if (typeof mostrarToastLogistica === 'function') {
+      mostrarToastLogistica(`🗑️ Cliente eliminado en vivo`);
+    }
+  }
+}
+
+/**
+ * Re-renderiza dinámicamente las vistas que dependen del listado de clientes
+ */
+function refrescarVistasClientes() {
+  try {
+    if (typeof renderClientes === 'function') renderClientes();
+  } catch (e) { console.warn('Aviso en renderClientes:', e); }
+
+  try {
+    if (typeof renderCheckboxesClientesRapidos === 'function') renderCheckboxesClientesRapidos();
+  } catch (e) { console.warn('Aviso en renderCheckboxesClientesRapidos:', e); }
+
+  try {
+    if (typeof actualizarKPIs === 'function') actualizarKPIs();
+  } catch (e) {}
+}
+
+/**
+ * 6. REALTIME: Suscripción al canal de incidencias (Broadcast en vivo y Postgres Changes)
+ */
+function suscribirIncidenciasRealtime() {
+  if (!_supabase) return null;
+
+  if (canalRealtimeIncidencias) {
+    try {
+      _supabase.removeChannel(canalRealtimeIncidencias);
+    } catch (e) {}
+    canalRealtimeIncidencias = null;
+  }
+
+  console.log('📡 Conectando canal Realtime "bugamed-incidencias-realtime"...');
+  canalRealtimeIncidencias = _supabase
+    .channel('bugamed-incidencias-realtime')
+    .on('broadcast', { event: 'incidencia_cambio' }, payload => {
+      console.log('⚡ [Realtime Incidencias Broadcast]:', payload);
+      const datosPayload = payload.payload || payload;
+      const { accion, datos } = datosPayload;
+      if (typeof window.procesarCambioIncidenciasRemoto === 'function') {
+        window.procesarCambioIncidenciasRemoto(accion, datos);
+      }
+    })
+    .on(
+      'postgres_changes',
+      { event: '*', schema: 'public', table: 'incidencias' },
+      payload => {
+        console.log(`⚡ [Realtime Incidencias Postgres] Evento: [${payload.eventType}]`, payload);
+        if (payload.eventType === 'INSERT' && payload.new) {
+          if (typeof window.procesarCambioIncidenciasRemoto === 'function') {
+            window.procesarCambioIncidenciasRemoto('NUEVA_INCIDENCIA', payload.new);
+          }
+        } else if (payload.eventType === 'UPDATE' && payload.new) {
+          if (typeof window.procesarCambioIncidenciasRemoto === 'function') {
+            window.procesarCambioIncidenciasRemoto('NUEVA_INCIDENCIA', payload.new);
+          }
+        }
+      }
+    )
+    .subscribe((status, err) => {
+      if (err) console.warn('Aviso canal Realtime Incidencias:', err);
+      else if (status === 'SUBSCRIBED') console.log('✓ [Realtime Incidencias] Canal suscrito exitosamente (SUBSCRIBED)');
+    });
+
+  window.canalRealtimeIncidencias = canalRealtimeIncidencias;
+  return canalRealtimeIncidencias;
+}
+
 /**
  * Función principal de arranque de Supabase llamada al cargar la página
  */
@@ -2751,12 +3248,15 @@ async function iniciarSupabaseApp() {
   suscribirRutasRealtime();
   suscribirRepostajesRealtime();
   suscribirConductoresRealtime();
+  suscribirClientesRealtime();
+  suscribirIncidenciasRealtime();
 
-  // 2. Cargar las rutas, repostajes y conductores remotos desde Supabase (SELECT)
+  // 2. Cargar las rutas, repostajes, conductores y clientes remotos desde Supabase (SELECT)
   await Promise.allSettled([
     cargarRutasDesdeSupabase(),
     cargarRepostajesDesdeSupabase(),
-    cargarConductoresDesdeSupabase()
+    cargarConductoresDesdeSupabase(),
+    cargarClientesDesdeSupabase()
   ]);
 }
 
@@ -2800,4 +3300,20 @@ window.canalRealtimeConductores = canalRealtimeConductores;
 window.suscribirConductoresRealtime = suscribirConductoresRealtime;
 window.procesarEventoRealtimeConductores = procesarEventoRealtimeConductores;
 window.refrescarVistasConductores = refrescarVistasConductores;
+
+// Exponer funciones de Clientes en window
+window.mapearClienteDesdeSupabase = mapearClienteDesdeSupabase;
+window.cargarClientesDesdeSupabase = cargarClientesDesdeSupabase;
+window.migrarClientesInicialesASupabase = migrarClientesInicialesASupabase;
+window.insertarClienteSupabase = insertarClienteSupabase;
+window.actualizarClienteSupabase = actualizarClienteSupabase;
+window.eliminarClienteSupabase = eliminarClienteSupabase;
+window.canalRealtimeClientes = canalRealtimeClientes;
+window.suscribirClientesRealtime = suscribirClientesRealtime;
+window.procesarEventoRealtimeClientes = procesarEventoRealtimeClientes;
+window.refrescarVistasClientes = refrescarVistasClientes;
+
+// Exponer funciones de Incidencias en window
+window.canalRealtimeIncidencias = canalRealtimeIncidencias;
+window.suscribirIncidenciasRealtime = suscribirIncidenciasRealtime;
 

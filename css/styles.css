@@ -95,3 +95,39 @@ body {
   animation-delay: 0.6s;
   left: -2px;
 }
+
+/* ==========================================================================
+   Efectos y Animaciones Visuales para Incidencias en Tiempo Real
+   ========================================================================== */
+@keyframes highlightIncidencia {
+  0% {
+    transform: scale(0.97);
+    box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.7);
+    border-color: #ef4444;
+  }
+  50% {
+    transform: scale(1.02);
+    box-shadow: 0 0 16px 4px rgba(239, 68, 68, 0.35);
+    border-color: #dc2626;
+  }
+  100% {
+    transform: scale(1);
+    box-shadow: 0 0 0 0 rgba(239, 68, 68, 0);
+  }
+}
+
+.incidencia-nueva-anim {
+  animation: highlightIncidencia 1.4s ease-in-out 3;
+  border-color: #ef4444 !important;
+  background-color: rgba(254, 242, 242, 0.9) !important;
+  position: relative;
+}
+
+@keyframes kpiAlertPulse {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.25); color: #dc2626; }
+}
+
+.kpi-alerta-anim {
+  animation: kpiAlertPulse 0.6s ease-in-out 3;
+}

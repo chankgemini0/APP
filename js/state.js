@@ -119,6 +119,7 @@ let clientes = cargarStorage('bugamed_clientes', [
   { nombre: 'Restaurante Cambrils Port', zona: 'Cambrils', tipo: 'Restaurante', direccion: 'Puerto Deportivo 8', telefono: '+34 977 444 555', ubicacion: 'https://www.google.com/maps/search/?api=1&query=Restaurante+Cambrils+Port+Puerto+Deportivo+8+Cambrils' },
   { nombre: 'Camping Estanyet', zona: 'Alcanar', tipo: 'Camping', direccion: 'Playa Vinaròs km 3', telefono: '+34 977 722 111', ubicacion: 'https://www.google.com/maps/search/?api=1&query=Camping+Estanyet+Alcanar' }
 ]);
+window.clientes = clientes;
 
 let rutas = cargarStorage('bugamed_rutas', [
   { id: 'ruta_init_1', dia: 'Lunes', tipoCliente: 'Hotel', conductor: 'Antonio Fernández', chofer: 'Antonio Fernández', camion: '8912-MBN', vehiculo: '8912-MBN', clientes: ['Hotel Meliá Palma', 'Hotel Salou Sun'], estado: 'pendiente' },
@@ -165,8 +166,9 @@ if (Array.isArray(repostajes)) {
 window.repostajes = repostajes;
 
 let incidencias = cargarStorage('bugamed_incidencias', [
-  { fecha: '2026-10-22', categoria: 'Neumáticos', camion: '4589-KLL', nota: 'Presión baja en rueda trasera derecha.', resuelto: false }
+  { id: 'inc_demo_1', fecha: '2026-10-22', categoria: 'Neumáticos', camion: '4589-KLL', nota: 'Presión baja en rueda trasera derecha.', resuelto: false }
 ]);
+window.incidencias = incidencias;
 
 const demoHistorialInicial = [
   // NOVIEMBRE 2026 - Antonio Fernández
@@ -349,6 +351,7 @@ function guardarDatosEnLocal() {
   window.repostajes = repostajes;
   window.conductores = conductores;
   window.choferes = conductores;
+  window.incidencias = incidencias;
   localStorage.setItem('bugamed_camiones', JSON.stringify(camiones));
   localStorage.setItem('bugamed_conductores', JSON.stringify(conductores));
   localStorage.setItem('bugamed_choferes', JSON.stringify(conductores));
@@ -540,10 +543,14 @@ function actualizarKPIs() {
   const elCond = document.getElementById('kpi-conductores') || document.getElementById('kpi-choferes');
   const elInc = document.getElementById('kpi-incidencias');
 
-  if (elCam) elCam.innerText = camiones.length;
-  if (elCond) elCond.innerText = conductores.length;
+  if (elCam && typeof camiones !== 'undefined') elCam.innerText = camiones.length;
+  if (elCond && typeof conductores !== 'undefined') elCond.innerText = conductores.length;
   if (elInc) {
-    const enCursoCount = incidencias.filter(i => !i.resuelto).length;
+    const lista = (typeof window.incidencias !== 'undefined' && Array.isArray(window.incidencias))
+      ? window.incidencias
+      : ((typeof incidencias !== 'undefined' && Array.isArray(incidencias)) ? incidencias : []);
+    const enCursoCount = lista.filter(i => !i.resuelto).length;
     elInc.innerText = enCursoCount;
   }
 }
+window.actualizarKPIs = actualizarKPIs;
